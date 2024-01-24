@@ -1,6 +1,34 @@
+//! IoT library for MOZAIK
+//! 
+//! Provides [protect] to encrypt and prepare IoT sensor data for the use in the MOZAIK architecture.
+//! 
+//! ## How to use
+//! ```rust
+//! use libmozaik_iot::*;
+//! // during initialization of the device
+//! let nonce = [0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0xff, 0xff, 0xff, 0xff]; // this should be a fresh nonce
+//! let key = [0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10]; // this should be a fresh device key
+//! 
+//! let mut state = DeviceState::new(nonce, key);
+//! 
+//! // when data is available
+//! const USER_ID: &str = "e7514b7a-9293-4c83-b733-a53e0e449635";
+//! let data = [0x01, 0x02, 0x03]; // data as &[u8] of any length
+//! match protect(USER_ID, &mut state, ProtectionAlgorithm::AesGcm128, &data) {
+//!     Ok(ct) => {
+//!         /* send ct */
+//!         # ()
+//!     },
+//!     Err(err) => {
+//!         /* handle error */
+//!         # ()
+//!     },
+//! }
+//! ```
+
 use std::{error::Error, fmt::Display};
 
-use aes_gcm::{aead::{Aead, Payload}, Aes128Gcm, Key, KeyInit};
+use aes_gcm::{aead::{Aead, Payload}, Aes128Gcm, KeyInit};
 
 
 const NONCE_SIZE_BITS: usize = 96;
@@ -10,17 +38,21 @@ const MAX_NONCE_CNT: i128 = 1 << NONCE_SIZE_BITS;
 const AES_KEY_SIZE: usize = 16;
 const AES_GCM_128_TAG_SIZE: usize = 16;
 
+/// State that needs to be persisted between invocations of [protect] with the same device key.
 #[derive(Clone)]
 pub struct DeviceState {
     used_nonces: i128,
-    nonce: [u8; NONCE_SIZE]
+    nonce: [u8; NONCE_SIZE],
+    key: [u8; AES_KEY_SIZE],
 }
 
 impl DeviceState {
-    pub fn new(start_nonce: [u8; NONCE_SIZE]) -> Self {
+    /// Constructs a new [DeviceState] from a starting nonce and a unused (fresh) device key.
+    pub fn new(start_nonce: [u8; NONCE_SIZE], fresh_key: [u8; AES_KEY_SIZE]) -> Self {
         Self {
             used_nonces: 0,
-            nonce: start_nonce
+            nonce: start_nonce,
+            key: fresh_key,
         }
     }
 
@@ -49,11 +81,35 @@ impl DeviceState {
     }
 }
 
-pub fn protect(user_id: &str, state: &mut DeviceState, key: &[u8; AES_KEY_SIZE], algorithm: ProtectionAlgorithm, data: &[u8]) -> Result<Vec<u8>, ProtectError> {
+/// Protects the given data by encrypting it. The returned bytes can be sent to the database.
+/// 
+/// ## Example Usage
+/// ```rust
+/// use libmozaik_iot::*;
+/// // during initialization of the device
+/// let nonce = [0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0xff, 0xff, 0xff, 0xff]; // this should be a fresh nonce
+/// let key = [0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10]; // this should be a fresh device key
+/// 
+/// let mut state = DeviceState::new(nonce, key);
+/// 
+/// // when data is available
+/// const USER_ID: &str = "e7514b7a-9293-4c83-b733-a53e0e449635";
+/// let data = [0x01, 0x02, 0x03]; // data as &[u8] of any length
+/// match protect(USER_ID, &mut state, ProtectionAlgorithm::AesGcm128, &data) {
+///     Ok(ct) => {
+///         /* send ct */
+///         # ()
+///     },
+///     Err(err) => {
+///         /* handle error */
+///         # ()
+///     },
+/// }
+/// ```
+pub fn protect(user_id: &str, state: &mut DeviceState, algorithm: ProtectionAlgorithm, data: &[u8]) -> Result<Vec<u8>, ProtectError> {
     match algorithm {
         ProtectionAlgorithm::AesGcm128 => {
-            let key: &Key<Aes128Gcm> = key.into();
-            let instance = Aes128Gcm::new(key);
+            let instance = Aes128Gcm::new(&state.key.into());
 
             let nonce = state.fresh_nonce()?;
             let user_id = user_id.as_bytes();
@@ -77,14 +133,22 @@ pub fn protect(user_id: &str, state: &mut DeviceState, key: &[u8; AES_KEY_SIZE],
     }
 }
 
+/// Error type idicating the nature of the error state returned from [protect].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ProtectError {
+    /// The maximum number of encryptions have been reached (all nonces have been exhausted).
+    /// To continue using [protect], a new device key must be deployed and a new instance of [DeviceState]
+    /// must be constructed with a fresh nonce and the new key.
     RekeyRequired,
+    /// The AES-GCM library returned an error indicating that encryption failed.
     AesGcm128Error(aes_gcm::Error),
 }
 
+/// Selector for the underyling encryption algorithm.
+/// Currently, only AES-GCM-128 is supported.
 #[derive(Clone, Copy)]
 pub enum ProtectionAlgorithm {
+    /// AES-GCM-128 (see NIST Special Publication 800-38D \[ <https://doi.org/10.6028/NIST.SP.800-38D> \] and RFC5288).
     AesGcm128
 }
 
@@ -116,6 +180,7 @@ mod tests {
         let mut state = DeviceState {
             used_nonces: (1 << NONCE_SIZE_BITS) - 1,
             nonce: [0u8; NONCE_SIZE],
+            key: [0u8; AES_KEY_SIZE],
         };
         
         assert!(state.fresh_nonce().is_ok());
@@ -137,10 +202,10 @@ mod tests {
     #[test]
     fn protect_decrypts_correctly() {
         
-        let mut state = DeviceState::new(START_NONCE.clone());
+        let mut state = DeviceState::new(START_NONCE.clone(), KEY.clone());
         let data_bytes: Vec<_> = SAMPLE.iter().map(|value| value.to_le_bytes()).flatten().collect();
 
-        let ct = protect(USER_ID, &mut state, &KEY, ProtectionAlgorithm::AesGcm128, &data_bytes).unwrap();
+        let ct = protect(USER_ID, &mut state, ProtectionAlgorithm::AesGcm128, &data_bytes).unwrap();
 
         // expect nonce in the first NONCE_SIZE bytes of the ciphertext
         assert_eq!(&state.nonce, &ct[..NONCE_SIZE]);
