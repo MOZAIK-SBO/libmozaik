@@ -1,0 +1,243 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+
+\usepackage[operators,sets]{cryptocode}
+
+\newcommand{\pub}{\ensuremath{\mathsf{pub}}}
+\newcommand{\priv}{\ensuremath{\mathsf{priv}}}
+
+\newcommand{\pubRSA}{\ensuremath{\pub^{\mathsf{RSA}}}}
+\newcommand{\privRSA}{\ensuremath{\priv^{\mathsf{RSA}}}}
+
+\newcommand{\pubEd}{\ensuremath{\pub^{\mathsf{Ed}}}}
+\newcommand{\privEd}{\ensuremath{\priv^{\mathsf{Ed}}}}
+
+\newcommand{\id}{\ensuremath{\mathsf{id}}}
+\newcommand{\idcomp}{\ensuremath{\mathsf{id}_{\mathsf{comp}}}}
+\newcommand{\type}{\ensuremath{\mathsf{type}}}
+\newcommand{\alg}{\ensuremath{\mathsf{alg}}}
+\newcommand{\kdem}{\ensuremath{k_{\mathsf{dem}}}}
+
+\newcommand{\share}[1]{\ensuremath{\langle #1 \rangle}}
+
+\newcommand{\AlgAESGCM}{\textsf{\textbf{AES-GCM-128}}}
+\newcommand{\RSAOAEP}{\ensuremath{\textsf{RSA-OAEP}}}
+\newcommand{\AESGCM}{\ensuremath{\textsf{AES-GCM}}}
+\newcommand{\Encrypt}{\ensuremath{\textsf{Enc}}}
+\newcommand{\Decrypt}{\ensuremath{\textsf{Dec}}}
+
+\newcommand{\hash}{\ensuremath{\textsf{SHA256}}}
+
+\title{libmozaik Documentation}
+\author{Erik Pohle}
+
+
+
+\begin{document}
+	\maketitle
+
+\section{Identity Management}
+\begin{itemize}
+	\item $(\pubRSA,\privRSA)$ is a RSA-2048 keypair where $\pubRSA$ denotes the public key and $\privRSA$ denotes the private key.
+%	\item $(\pubEd,\privEd)$ is a Curve25519 keypair where $\pubEd$ denotes the public key and $\privEd$ denotes the private key.
+\end{itemize}
+
+\section{Sensor Data Protection Algorithms}
+\begin{description}
+	\item[AES-GCM-128]
+\end{description}
+
+\section{Algorithms}
+\begin{itemize}
+	\item $\RSAOAEP.\Encrypt(\pubRSA, m, l)$ encrypts $m$ under $\pubRSA$ with associated data $l$.
+	\item $\AESGCM.\Encrypt(k,N,m,ad)$ encrypts $m$ under $k$ with nonce $N$ and associated data $ad$.
+	\item $\hash(m)$ hashes the input $m$ with SHA-256. The expression $x[..96]$ denotes truncation of bitstring $x$ to bits $0$ to $95$ (in total 96 bits).
+\end{itemize}
+
+\section{libmozaik-iot-v0.1}
+The IoT device needs to keep a state $\mathsf{st}$: (nonce counter $N$)
+\subsection{Protect}
+\begin{description}
+	\item[Input] user id $\id$, state $\mathsf{st}$, IoT device key $k$, IoT protection algorithm $\alg$, data $d$
+	\item[Output] ciphertext $c$
+\end{description}
+\begin{itemize}
+	\item Check that nonce state $\mathsf{st}$ can generate a new nonce (ie. counter is less than overflow for the nonce size in $\alg$)
+	\item If $\alg$ is \AlgAESGCM, then
+	\begin{itemize}
+		\item Let $N$ be the new, fresh nonce derived from $\mathsf{st}$
+		\item Let $\mathsf{AD} = \id||N$
+		\item Let $c \gets \AESGCM.\Encrypt(k,N,d,\mathsf{AD})$.
+		\item Return $N||c$.
+	\end{itemize}
+\end{itemize}
+
+{\color{gray}
+\section{libmozaik-client-v1.0?}
+
+\subsection{CreateAnalysisRequestData}
+\begin{description}
+	\item[Input] user id $\id$, user public key $\pubRSA_u$, IoT device key $k_u$, IoT protection algorithm $\alg$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, data indices $i_1, \dots, i_M$, analysis type $\type$.
+	\item[Output] 3 encrypted key shares $c_1, c_2, c_3$, \textcolor{red}{proof of knowledge of $k$ and $(\privRSA_u, \pubRSA_u)$ $\pi$}
+\end{description}
+\begin{itemize}
+	\item Let context be $(\id||\pubRSA_u||\pubRSA_1||\pubRSA_2||\pubRSA_3||i_1||\dots||i_M||\type||\alg)$
+	\item If $\alg$ is \AlgAESGCM, then
+	\begin{itemize}
+		\item Assert $k_u \in \bin^{128}$
+		\item Let $r_1, r_2 \sample \bin^{128}$, set
+		\[
+		\share{k}_1 \gets k_u \oplus r_1 \oplus r_2,\, \share{k}_2 \gets r_1,\, \share{k}_3 \gets r_2 \,.
+		\]
+	\end{itemize}
+	\item For $j \in \{1,2,3\}$, do
+	\begin{align*}
+		\kdem & \sample \bin^{128} \\
+		c^{\mathsf{RSA}} & \gets \RSAOAEP.\Encrypt(\pubRSA_j, \kdem, \mathsf{context}||\pubRSA_j) \\
+		N & \sample \bin{96} \\
+		c^k & \gets \AESGCM.\Encrypt(\kdem,N,\share{k}_j,\mathsf{context}||\pubRSA_j)
+	\end{align*}
+	Set $c_j \gets c^{\mathsf{RSA}}||N||c^k$
+	\item \textcolor{blue}{Compute $\sigma \gets MAC_k(\pubRSA_u)$}
+	\item Ouptut $c_1, c_2, c_3$, \textcolor{blue}{$\sigma$}
+	\item \textcolor{red}{ToDo: create $\pi$}
+\end{itemize}
+
+\subsection{ReconstructResult}
+\begin{description}
+	\item[Input] user id $\id$, user key pair $(\pubRSA_u, \privRSA_u)$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, computation id $\idcomp$, 3 result share ciphertexts $c_1, c_2, c_3$
+	\item[Output] The result $o_1, \dots, o_N$ or $\bot$
+\end{description}
+\begin{itemize}
+	\item For each $j \in \{1,2,3\}$ do
+	\begin{itemize}
+		\item Let $c^{\mathsf{RSA}}_j||N||c^k_j \gets c_j$.
+		\item Let context be $\id||\pubRSA_j||\idcomp||\type$
+		\item Decrypt $\kdem \gets \RSAOAEP.\Decrypt(\privRSA_u,c^{\mathsf{RSA}}_j,\mathsf{context})$ or output $\bot$ on fail.
+		\item Decrypt $\share{o_1}_j||\dots||\share{o_N}_j \gets \AESGCM.\Decrypt(\kdem,N,c^k,\mathsf{context})$ or output $\bot$ on fail.
+	\end{itemize}
+	\item Check that $\share{o_1}, \dots, \share{o_N}$ are consistent
+	\item Output $o_1, \dots, o_N \gets \mathsf{Reconstruct}(\share{o_1}, \dots, \share{o_N})$
+\end{itemize}
+}
+
+
+\section{libmozaik-client-v0.1}
+
+\subsection{CreateAnalysisRequestData}
+\begin{description}
+	\item[Input] user id $\id$, IoT device key $k_u$, IoT protection algorithm $\alg$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, data indices $i_1, \dots, i_M$, analysis type $\type$.
+	\item[Output] 3 encrypted key shares $c_1, c_2, c_3$
+\end{description}
+\begin{itemize}
+	\item Let context be $(\id||\pubRSA_1||\pubRSA_2||\pubRSA_3||i_1||\dots||i_M||\type||\alg)$
+	\item If $\alg$ is \AlgAESGCM, then
+	\begin{itemize}
+		\item Assert $k_u \in \bin^{128}$
+		\item Let $r_1, r_2 \sample \bin^{128}$, set
+		\[
+			\share{k}_1 \gets k_u \oplus r_1 \oplus r_2,\, \share{k}_2 \gets r_1,\, \share{k}_3 \gets r_2 \,.
+		\]
+	\end{itemize}
+	\item For $j \in \{1,2,3\}$, do
+	\[
+		c_j \gets \RSAOAEP.\Encrypt(\pubRSA_j, \share{k}_j, \mathsf{context}||\pubRSA_j)
+	\]
+	\item Output $c_1, c_2, c_3$
+\end{itemize}
+
+\subsection{ReconstructResult}
+\begin{description}
+	\item[Input] user id $\id$, IoT device key $k_u$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, computation id $\idcomp$, analysis type $\type$, result ciphertext $c$
+	\item[Output] The result $o_1, \dots, o_M$ or $\bot$
+\end{description}
+\begin{itemize}
+	\item Let context be $\id||\pubRSA_1||\pubRSA_2||\pubRSA_3||\idcomp||\type$
+	\item Derive $N \gets \hash(\mathsf{context})[..96]$
+	\item Decrypt $o_1||\dots||o_M \gets \AESGCM.\Decrypt(k_u,N,c,\mathsf{context})$ or output $\bot$ on fail.
+	\item Output $o_1, \dots, o_M$.
+\end{itemize}
+
+
+{\color{gray}
+\section{libmozaik-mpc-v1.0}
+
+\subsection{DecryptKeyShare}
+\begin{description}
+	\item[Input] MPC party key $(\pubRSA,\privRSA)$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, user id $\id$, IoT protection algorithm $\alg$, data indices $i_1, \dots, i_M$, analysis type $\type$, encrypted key share $c$
+	\item[Output] key share $\share{k}$ or $\bot$
+\end{description}
+\begin{itemize}
+	\item Assert $\pubRSA \in \{\pubRSA_1, \pubRSA_2, \pubRSA_3\}$
+	\item Let context be $(\id||\pubRSA_u||\pubRSA_1||\pubRSA_2||\pubRSA_3||i_1||\dots||i_M||\type||\alg||\pubRSA)$
+	\item Let $c^{\mathsf{RSA}}||N||c^k \gets c$
+	\item Decrypt $\kdem \gets \RSAOAEP.\Decrypt(\privRSA,c^{\mathsf{RSA}},\mathsf{context})$ or output  $\bot$ on fail.
+	\item Decrypt $\share{k} \gets \AESGCM.\Decrypt(\kdem,N,c^k,\mathsf{context})$ or output  $\bot$ on fail.
+	\item Output $\share{k}$
+\end{itemize}
+
+\subsection{EncryptResultShares}
+\begin{description}
+	\item[Input] MPC party key $(\pubRSA,\privRSA)$, user id $\id$, user public key $\pubRSA_u$, analysis type $\type$, computation id $\idcomp$, result shares $\share{o_1}, \dots, \share{o_N}$, \textcolor{red}{proof of knowledge of $k$ and $(\privRSA_u, \pubRSA_u)$ $\pi$}
+	\item[Output] Encrypted result shares $c$ or $\bot$
+\end{description}
+\begin{itemize}
+	\item \textcolor{red}{check $\pi$}
+	\item Let context be $\id||\pubRSA||\idcomp||\type$
+	\item Encrypt $\share{o_1}, \dots, \share{o_N}$.
+	\begin{align*}
+		\kdem & \sample \bin^{128} \\
+		c^{\mathsf{RSA}} & \gets \RSAOAEP.\Encrypt(\pubRSA_u, \kdem, \mathsf{context}) \\
+		N & \sample \bin^{96} \\
+		c^k & \gets \AESGCM.\Encrypt(\kdem,N,\share{o_1}||\dots||\share{o_N},\mathsf{context})
+	\end{align*}
+	Set $c \gets c^{\mathsf{RSA}}||c^k$
+	\item Output $c$.
+\end{itemize}
+}
+
+
+\section{libmozaik-mpc-v0.1}
+\newpage
+\subsection{DecryptKeyShare}
+\begin{description}
+	\item[Input] MPC party key $(\pubRSA,\privRSA)$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, user id $\id$, IoT protection algorithm $\alg$, data indices $i_1, \dots, i_M$, analysis type $\type$, encrypted key share $c$
+	\item[Output] key share $\share{k}$ or $\bot$
+\end{description}
+\begin{itemize}
+	\item Assert $\pubRSA \in \{\pubRSA_1, \pubRSA_2, \pubRSA_3\}$
+	\item Let context be $(\id||\pubRSA_u||\pubRSA_1||\pubRSA_2||\pubRSA_3||i_1||\dots||i_M||\type||\alg||\pubRSA)$
+	\item Decrypt $\share{k} \gets \RSAOAEP.\Decrypt(\privRSA,c,\mathsf{context})$ or output  $\bot$ on fail.
+	\item Output $\share{k}$
+\end{itemize}
+
+\subsection{MPC-DistributedDecryption}
+Joint protocol among the 3 MPC parties.
+\begin{description}
+	\item[Input] user id $\id$, IoT protection algorithm $\alg$, IoT data ciphertexts $c_1, \dots, c_M$ (corresponding to data indices $i_1, \dots, i_M$), key share $\share{k}$
+	\item[Output] shares of the IoT data $\share{d_1}, \dots, \share{d_M}$.
+\end{description}
+\begin{itemize}
+	\item The MPC parties run for each $j \in \{1, \dots, M\}$ (if $\alg = \AlgAESGCM$),
+	\begin{itemize}
+		\item Set $N||c \gets c_j$.
+		\item Set $\mathsf{AD} = \id||N$
+		\item $\share{d_j} \gets \AESGCM.\Decrypt(\share{k},N,c,\mathsf{AD})$ (this is a MPC protocol emulating $\AESGCM$)
+	\end{itemize}
+	\item Output $\share{d_1}, \dots, \share{d_M}$.
+\end{itemize}
+
+\subsection{MPC-DistributedEncryption}
+Joint protocol among the 3 MPC parties.
+\begin{description}
+	\item[Input] user id $\id$, 3 MPC party public keys $\pubRSA_1, \pubRSA_2, \pubRSA_3$, computation id $\idcomp$, IoT protection algorithm $\alg$, result shares $\share{o_1}, \dots, \share{o_M}$, analysis type $\type$, key share $\share{k}$
+	\item[Output] shares of the IoT data $\share{d_1}, \dots, \share{d_M}$.
+\end{description}
+\begin{itemize}
+	\item Let context be $\id||\pubRSA_1||\pubRSA_2||\pubRSA_3||\idcomp||\type$
+	\item Derive a fresh nonce as $N \gets \hash(\mathsf{context})[..96]$
+	\item The MPC parties jointly compute $c \gets \AESGCM.\Encrypt(\share{k}, N, \share{o_1}||\dots||\share{o_M}, \mathsf{context})$ (this is a MPC protocol emulating $\AESGCM$)
+	\item Output $c$
+\end{itemize}
+
+\end{document}
