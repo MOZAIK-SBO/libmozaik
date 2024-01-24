@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Result</title>
+</head>
+<body>
+    <h1>Result</h1>
+    {% if result %}
+        {{ result | safe }}
+    {% else %}
+        <p>Result not found.</p>
+    {% endif %}
+    <br>
+    <a href="/">Back to Input Form</a>
+</body>
+</html>

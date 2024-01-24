@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Heartbeat Data Classification in MPC</title>
+    <script>
+        function sendData(event) {
+            event.preventDefault(); // Prevent the default form submission behavior
+
+            // Get the values from the form
+            var request_id = document.getElementById("request_id").value;
+            var input_array = document.getElementById("input_array").value;
+            
+            // Split the input_array into an array of integers
+            var input_array_values = input_array.split(" ").map(Number);
+
+            // Create a JSON object
+            var data = {
+                "request_id": request_id,
+                "input_array": input_array_values
+            };
+
+            // Send a POST request to the server
+            fetch("/analyse/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data)
+            })
+            .then(function(response) {
+                if (response.ok) {
+                    return response.text();
+                } else {
+                    throw new Error("Request failed.");
+                }
+            })
+            .then(function(responseText) {
+                // Handle the server's response here, if needed
+                console.log(responseText);
+            })
+            .catch(function(error) {
+                // Handle any errors here
+                console.error(error);
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Heartbeat Data Classification in MPC</h1>
+    <form onsubmit="sendData(event);"> <!-- Pass the event object to sendData -->
+        <label for="request_id">Request ID (UUIDv4):</label><br>
+        <input type="text" name="request_id" id="request_id" required><br><br>
+
+        <label for="input_array">Enter your sample (187 numbers separated by space)</label><br>
+        <input type="text" name="input_array" id="input_array" required><br><br>
+
+        <input type="submit" value="Find Maximum">
+    </form>
+</body>
+</html>

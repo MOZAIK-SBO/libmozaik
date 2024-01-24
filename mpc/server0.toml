@@ -1,0 +1,6 @@
+results_dir = "results"
+port = 443
+ca_cert = "tls_certs/ca.crt"
+server_cert = "tls_certs/server1.crt"
+server_key = "tls_certs/server1.key"
+party_index = 0
