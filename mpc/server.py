@@ -8,6 +8,7 @@ import threading
 import queue
 import ssl
 import sys
+import requests # Lib to send http requests
 
 
 import tomli as tomllib
@@ -50,7 +51,11 @@ def analyse():
         data = request.get_json()
 
         # Extract data fields
-        request_id = data.get('id')
+        request_id = data.get('analysis_id')
+        user_id = data.get('user_id')
+        data_index = data.get('data_index', [])
+        user_key = data.get('user_key')
+        analysis_type = data.get('analysis_type')
         input_array = data.get('sample', [])
 
         # Validate request_id as a UUIDv4
@@ -90,10 +95,8 @@ Processing function
 
 def process_requests():
     while True:
-        # print("while true")
         try:
             request_id, input_array = request_queue.get()
-            # print("Get from queue")
             # Lock to ensure thread safety
             with request_lock:
                 if len(input_array) == 187:
@@ -120,10 +123,14 @@ def process_requests():
                                         packed_share = struct.pack('<q', share)
                                         file.write(packed_share)
                         else:
-                            error_in_task(request_id, 500, 'Input file not found')
+                            error_in_task(request_id, 500, 'MP-SPDZ Input file not found')
                             # Remove the request from the queue after processing
                             request_queue.task_done()
                             continue
+
+                        targetfile = os.path.join(CONFIG_RESULTS_DIR, f'{request_id}.txt')
+                        with open(targetfile, 'w') as file:
+                            file.write("Starting computation")
 
                         # Run the binary program and capture its output
                         try:
@@ -138,8 +145,6 @@ def process_requests():
                             result.check_returncode()
                             
                             # Move the result to the targetfile
-                            targetfile = os.path.join(CONFIG_RESULTS_DIR, f'{request_id}.txt')
-
                             if os.path.exists(sharesfile):
                                 try:
                                     # Open the file in binary read mode
@@ -174,8 +179,7 @@ def process_requests():
                                     error_in_task(request_id, 500, f"Unable to interpret the result: {e}")
 
                             else:
-                                error_in_task(request_id, 500, f"The output file does not exist: the file '{shares_result_path}' does not exist.")
-                            
+                                error_in_task(request_id, 500, f"The output file does not exist: the file '{shares_result_path}' does not exist.")   
                             
                             # output = result.stdout
 
@@ -188,7 +192,7 @@ def process_requests():
                     except ValueError:
                         error_in_task(request_id, 200, "Invalid input. Please enter valid numbers.")
                 else:
-                    error_in_task(request_id, 200, "Invalid number of elements. Input exactly 187 elements")
+                    error_in_task(request_id, 200, "Invalid number of elements. Input exactly 187 tuples of 2 integers")
             
                 # Remove the request from the queue after processing
                 request_queue.task_done()
@@ -197,16 +201,116 @@ def process_requests():
                 error_in_task(request_id, 500, f'An error occurred while processing requests: {e}')
             else:
                 raise e
+            
+"""
+MOZAIK-Obelisk 
+"""    
+
+def getData(user_id, data_index):
+    mozaik_obelisk_url = '127.0.0.1'
+    endpoint = '/getData'
+
+    # Construct the full URL with parameters
+    url = f'{mozaik_obelisk_url}{endpoint}?user_id={user_id}&data_index={data_index}'
+
+    try:
+        # Make the GET request
+        response = requests.get(url)
+
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            # Parse and return the user_data from the JSON response
+            return response.json().get('user_data')
+        else:
+            # Print an error message if the request was not successful
+            print(f'Error: {response.status_code} - {response.text}')
+            return None
+    except requests.RequestException as e:
+        # Print an error message if the request encountered an exception
+        print(f'RequestException: {e}')
+        return None
+    
+def getKeyShare(analysis_id):
+    mozaik_obelisk_url = '127.0.0.1'
+    endpoint = '/getKeyShare'
+
+    # Construct the full URL with parameters
+    url = f'{mozaik_obelisk_url}{endpoint}?user_id={analysis_id}'
+
+    try:
+        # Make the GET request
+        response = requests.get(url)
+
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            # Parse and return the user_data from the JSON response
+            return response.json().get('key_share')
+        else:
+            # Print an error message if the request was not successful
+            print(f'Error: {response.status_code} - {response.text}')
+            return None
+    except requests.RequestException as e:
+        # Print an error message if the request encountered an exception
+        print(f'RequestException: {e}')
+        return None
+    
+def storeResult(analysis_id, user_id, result):
+    base_url = '127.0.0.1'
+    endpoint = '/storeResult'
+
+    # Construct the full URL
+    url = f'{base_url}{endpoint}'
+
+    # Define the payload (data to be sent in the POST request)
+    payload = {
+        'analysis_id': analysis_id,
+        'user_id': user_id,
+        'result': result
+    }
+
+    try:
+        # Make the POST request
+        response = requests.post(url, json=payload)
+
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            # Parse and return any relevant information from the JSON response
+            return response.json()
+        else:
+            # Print an error message if the request was not successful
+            print(f'Error: {response.status_code} - {response.text}')
+            return None
+    except requests.RequestException as e:
+        # Print an error message if the request encountered an exception
+        print(f'RequestException: {e}')
+        return None
 
 """
 Results
 """
+    
+@app.route('/status', methods=['GET'])
+def get_analysis_status():
+    # Get JSON data from the request
+    data = request.get_json()
 
-@app.route('/results/<uuid:request_id>', methods=['GET'])
-def view_result(request_id):
-    targetfile = os.path.join(CONFIG_RESULTS_DIR, f'{request_id}.txt')
+    # Extract analysis_id from data
+    analysis_id = data.get('analysis_id')
 
-    # Check if the file with the request ID exists in the 'results' folder
+    # Check if analysis_id is provided
+    if not analysis_id:
+        return jsonify(error="Missing analysis_id in JSON data."), 400
+    
+    # Validate request_id as a UUIDv4
+    try:
+        request_uuid = uuid.UUID(analysis_id, version=4)
+    except TypeError:
+        return jsonify(error="Invalid analysis_id. Please provide a valid UUIDv4."), 400
+
+    # Construct the targetfile path based on analysis_id
+    targetfile = os.path.join(CONFIG_RESULTS_DIR, f'{analysis_id}.txt')
+
+    # Check if the file with the analysis_id exists in the 'results' folder
     if os.path.isfile(targetfile):
         # If it exists, read its content
         with open(targetfile, 'r') as file:
@@ -219,14 +323,19 @@ def view_result(request_id):
                 code = split_content[1]
                 message = ':'.join(split_content[2:])
                 print(message)
-                return jsonify(type='EXEC_ERROR', details=message), 200
+                return jsonify(type='FAILED', details=message), 200
+            
+            elif content.startswith('Starting computation'):
+                return jsonify(type="RUNNING"), 200
             else:
-                return jsonify(type="READY",prediction=content), 200
+                # Delete the file after if the computation was completed
+                os.remove(targetfile)
+                return jsonify(type="COMPLETED", prediction=content), 200
         else:
-            return jsonify(type="STILL_RUNNING"), 200
+            return jsonify(type="QUEUED"), 200
     else:
         # If the file does not exist, return a 404
-        return jsonify(error="The request ID is unknown"), 404
+        return jsonify(error="The analysis ID is unknown"), 404
 
 # Start a background thread to process requests
 request_thread = threading.Thread(target=process_requests)
