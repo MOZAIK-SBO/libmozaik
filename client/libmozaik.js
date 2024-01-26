@@ -71,14 +71,17 @@ export async function createAnalysisRequestData(userId, iotDeviceKey, algorithm,
 export async function reconstructResult(userId, iotDeviceKey, party1Pubkey, party2Pubkey, party3Pubkey, computationId, analysisType, encryptedResult) {
     // create context
     const textEncoder = new TextEncoder();
-    const userIdAndPubkeyBuffer = await createUserIdAndPubkeyContext(textEncoder, userId, party1Pubkey, party2Pubkey, party3Pubkey)["contextBuf"];
+    const userIdAndPubkeyBuffer = (await createUserIdAndPubkeyContext(textEncoder, userId, party1Pubkey, party2Pubkey, party3Pubkey))["contextBuf"];
     const compIdBuf = textEncoder.encode(computationId);
     const analysisTypeBuf = textEncoder.encode(analysisType);
     const context = append([userIdAndPubkeyBuffer, compIdBuf, analysisTypeBuf]);
 
+    // convert key
+    const key = await crypto.importKey("raw", iotDeviceKey, {name: "AES-GCM"}, true, ["decrypt"]);
+
     // derive nonce from context
     const fullNonce = await crypto.digest("SHA-256", context);
     // the full nonce is too large, AES-GCM can only handle 96-bit
-    const msg = await crypto.decrypt({name: "AES-GCM", iv: fullNonce.slice(0,12), additionalData: context, tagLength: 128}, iotDeviceKey, encryptedResult);
+    const msg = await crypto.decrypt({name: "AES-GCM", iv: fullNonce.slice(0,12), additionalData: context, tagLength: 128}, key, encryptedResult);
     return msg;
 }

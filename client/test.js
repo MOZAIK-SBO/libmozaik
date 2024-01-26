@@ -1,4 +1,4 @@
-import { createAnalysisRequestData } from "./libmozaik.js";
+import { createAnalysisRequestData, reconstructResult } from "./libmozaik.js";
 
 var crypto = window.crypto;
 
@@ -72,13 +72,13 @@ function bufferToHex (buffer) {
       .join ("");
 }
 
-async function test() {
+async function testCreateAnalysisRequestData() {
   const userId = "4d14750e-2353-4d30-ac2b-e893818076d2";
   const iotDeviceKey = new Uint8Array([0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01]);
   // data indices in Obelisk are UTC timestamps with precision of seconds
   const dataIndices = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03", "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07", "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
     .map(datestring => Date.parse(datestring) / 1000);
-  console.log(dataIndices);
+  
   const pk1 = await importRsaKey(mpc1Pubkey);
   const pk2 = await importRsaKey(mpc2Pubkey);
   const pk3 = await importRsaKey(mpc3Pubkey);
@@ -90,12 +90,44 @@ async function test() {
   console.log(bufferToHex(cts[2]));
 }
 
-test()
+function hexToBuffer(s) {
+  const ct = new Uint8Array(s.length/2)
+  for (var i=0; i<ct.byteLength; i++) {
+    ct[i] = parseInt(s.substring(2*i, 2*i+2), 16);
+  }
+  return ct;
+}
+
+async function testReconstructResult() {
+  const userId = "4d14750e-2353-4d30-ac2b-e893818076d2";
+  const iotDeviceKey = new Uint8Array([0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01]);
+  const pk1 = await importRsaKey(mpc1Pubkey);
+  const pk2 = await importRsaKey(mpc2Pubkey);
+  const pk3 = await importRsaKey(mpc3Pubkey);
+
+  const computationId = "28341f07-286a-4761-8fde-220b7be3d4cc"
+  const analysisType = "Heartbeat-Demo-1";
+
+  // load hex encoded ciphertext
+  const ct = hexToBuffer("2bb048962628f451545a2ff60224f46e8e2a464f0160fea8ca4dd9bfd91475af2d7c197d5c1c66e40a91a14da799fde85a089e5621df6c07");
+  const result = await reconstructResult(userId, iotDeviceKey, pk1, pk2, pk3, computationId, analysisType, ct);
+
+  console.assert(result.byteLength == 5*8);
+  const expected = hexToBuffer("2bb048962628f451545a2ff60224f46e8e2a464f0160fea8ca4dd9bfd91475af2d7c197d5c1c66e4");
+  console.assert(bufferToHex(result) == "884fe77815f1575505ac82e65f6a3b2c02ead604f029ca2e516e0650b866f111585ef5ec4546e010");
+}
+
+testCreateAnalysisRequestData()
   .then(() => {
-    console.log("Test ok");
+    console.log("Test CreateAnalysisRequestData ok");
   });
   // ,
   // error => {
   //   console.log("Error: ");
   //   console.log(error);
   // })
+
+testReconstructResult()
+  .then(() => {
+    console.log("Test ReconstructResult ok");
+  });

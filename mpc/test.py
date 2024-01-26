@@ -1,6 +1,7 @@
 import unittest
+from Crypto.Cipher import AES
 
-from key_share import MpcPartyKeys, decrypt_key_share
+from key_share import MpcPartyKeys, decrypt_key_share, prepare_params_for_dist_enc
 
 class TestDecryptKeyShare(unittest.TestCase):
     def get_config(party_index):
@@ -37,6 +38,29 @@ class TestDecryptKeyShare(unittest.TestCase):
         for i in range(16):
             computed_key[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
         assert computed_key == TestDecryptKeyShare.expected_key
+
+    def test_params_dist_enc(self):
+        keys = MpcPartyKeys(TestDecryptKeyShare.get_config(0))
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        computation_id = "28341f07-286a-4761-8fde-220b7be3d4cc"
+        (nonce, ad) = prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type)
+        print(f'Nonce: {nonce.hex()}')
+        # the (plaintext) prediction is a vector of 5 64-bit values in little endian
+        result = [6149648890722733960, 3187258121416518661, 3371553381890320898, 1292927509834657361, 1216049165532225112]
+        # as bytes
+        result_bytes = bytearray(len(result) * 8)
+        for (i, res) in enumerate(result):
+            for j in range(8):
+                result_bytes[8*i+j] = (res >> 8*j) & 0xff
+        
+        instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
+        instance.update(ad)
+        ct, tag = instance.encrypt_and_digest(result_bytes)
+
+        print(f'M: {result_bytes.hex()}')
+        print(f'CT: {ct.hex()}')
+        print(f'Tag: {tag.hex()}')
 
 
 if __name__ == '__main__':

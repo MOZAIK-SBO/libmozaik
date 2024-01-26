@@ -18,13 +18,15 @@ class MpcPartyKeys:
             pk = RSA.import_key(fp.read())
             assert not pk.has_private()
             return pk
-        
+    
+    def get_party_keys_as_bytes(self):
+        buffer = list(pk.export_key(format='DER') for pk in self.party_keys)
+        return b''.join(buffer)
         
 
 def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, ciphertext):
-    pk1, pk2, pk3 = keys.party_keys
     # create context
-    context = bytes(user_id, encoding='utf-8') + pk1.export_key(format='DER') + pk2.export_key(format='DER') + pk3.export_key(format='DER')
+    context = bytes(user_id, encoding='utf-8') + keys.get_party_keys_as_bytes()
     data_indices_buf = bytearray(len(data_indices) * 4)
     for i,d in enumerate(data_indices):
         data_indices_buf[4*i] = d & 0xff
@@ -40,3 +42,12 @@ def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, cip
     except ValueError as e:
         # the integrity check of the decryption failed
         return None
+
+def prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type):
+    # create context
+    context = bytes(user_id, encoding='utf-8') + keys.get_party_keys_as_bytes() + bytes(computation_id, encoding='utf-8') + bytes(analysis_type, encoding='utf-8')
+    # derive nonce
+    instance = SHA256.new()
+    instance.update(context)
+    nonce = instance.digest()[:12]
+    return (nonce, context) # nonce and associated data
