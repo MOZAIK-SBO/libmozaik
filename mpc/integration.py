@@ -38,7 +38,7 @@ class IntegrationTest(unittest.TestCase):
         Checks whether the webdriver works and can load the glue html file
         :return:
         """
-        root_file = Path("../client/integration_glue.html")
+        root_file = Path("assets/integration_test_glue/integration_glue.html")
         self.assertTrue(root_file.exists())
 
         abs_path = root_file.absolute()
@@ -60,7 +60,7 @@ class IntegrationTest(unittest.TestCase):
         iot_key = base64.b64encode(iot_key_bytes).decode("ascii").rstrip("=")
 
         algorithm = "AES-GCM-128"
-        key_path = Path("./assets/integration_keys")
+        key_path = Path("assets/integration_test_keys")
         analysis_type="Heartbeat-PoC"
 
         p1_key_path = key_path / "party_key_1.pem"
@@ -106,7 +106,7 @@ class IntegrationTest(unittest.TestCase):
             data_idx=data_indices
         )
 
-        root_file = Path("../client/integration_glue.html")
+        root_file = Path("assets/integration_test_glue/integration_glue.html")
         self.assertTrue(root_file.exists())
 
         abs_path = root_file.absolute()

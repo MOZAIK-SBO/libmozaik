@@ -1,4 +1,4 @@
-import { createAnalysisRequestData, reconstructResult } from "./libmozaik.js";
+import { createAnalysisRequestData, reconstructResult } from "../../../client/libmozaik.js";
 
 window.integration = Object();
 window.integration.results = Object();
