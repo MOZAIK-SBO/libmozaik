@@ -14,6 +14,7 @@ function append(arrays) {
 
 async function pkEnc(share, pubKey, pubKeyBuf, context) {
     const label = append([context, pubKeyBuf]);
+    console.log(share)
     return crypto.encrypt({name: "RSA-OAEP", label: label}, pubKey, share);
 }
 

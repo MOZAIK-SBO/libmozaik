@@ -10,6 +10,7 @@ import subprocess
 from threading import Thread
 
 class TestDecryptKeyShare(unittest.TestCase):
+    @staticmethod
     def get_config(party_index):
         party_keys = ['tls_certs/server1.crt', 'tls_certs/server2.crt', 'tls_certs/server3.crt']
         return {

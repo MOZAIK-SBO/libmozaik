@@ -3,15 +3,17 @@ import json
 import base64
 import logging
 
+from typing import Dict, Tuple
 from math import log2, ceil
 from pathlib import Path
 
 from selenium import webdriver
 from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Hash import SHA256
 
 
 class IntegrationTest(unittest.TestCase):
-
     __slots__ = ["opts_dict", "firefox_options", "firefox_driver"]
 
     @classmethod
@@ -32,7 +34,10 @@ class IntegrationTest(unittest.TestCase):
         cls.firefox_driver = webdriver.Firefox(options=cls.firefox_options)
 
     def test_trivial(self):
-
+        """
+        Checks whether the webdriver works and can load the glue html file
+        :return:
+        """
         root_file = Path("../client/integration_glue.html")
         self.assertTrue(root_file.exists())
 
@@ -41,23 +46,42 @@ class IntegrationTest(unittest.TestCase):
         self.assertTrue("HTML" in self.firefox_driver.title.lower())
 
     def test_createAnalysisRequestData(self):
+        """
+        Checks whether the key shares created by the client can be decrypted by the server side
+        """
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         data_idx = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03",
-         "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07",
-         "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
+                    "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07",
+                    "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
 
-        # normal values that are not part of the key don need urlsafe base64 unlike the key. We love consistency :)))
-        iot_key = base64.b64encode(bytes([0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01])).decode("ascii").rstrip("=")
+        # normal values that are not part of the key dont need urlsafe base64 unlike the key. We love consistency :)))
+        iot_key_bytes = bytes(
+            [0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01])
+        iot_key = base64.b64encode(iot_key_bytes).decode("ascii").rstrip("=")
+
         algorithm = "AES-GCM-128"
         key_path = Path("./assets/integration_keys")
-        p1_key_path = key_path / "pub1.pem"
-        p2_key_path = key_path / "pub2.pem"
-        p3_key_path = key_path / "pub3.pem"
+        analysis_type="Heartbeat-PoC"
 
-        p1_json = self.pem_to_jwt(p1_key_path)
-        p2_json = self.pem_to_jwt(p2_key_path)
-        p3_json = self.pem_to_jwt(p3_key_path)
+        p1_key_path = key_path / "party_key_1.pem"
+        p2_key_path = key_path / "party_key_2.pem"
+        p3_key_path = key_path / "party_key_3.pem"
 
+        key1, p1_json = self.pem_to_jwt(p1_key_path)
+        key2, p2_json = self.pem_to_jwt(p2_key_path)
+        key3, p3_json = self.pem_to_jwt(p3_key_path)
+
+        c1,c2,c3 = self.createAnalysisRequestHook(user_id, iot_key, algorithm, p1_json, p2_json, p3_json, analysis_type, data_idx)
+
+        # TODO: here comes decrypt_key_share
+
+    def createAnalysisRequestHook(self, user_id, iot_key, algorithm, p1_key_json, p2_key_json,
+                                  p3_key_json, analysis_type, data_indices) -> Tuple[bytes,bytes,bytes]:
+        """
+        Function that calls the method of the same name in JS and recovers the (hopefully correct) outputs
+        :param _: all parameters play the same role as in the JS equivalent
+        :return: three encrypted shared 1 per party
+        """
         script_template = """
             window.integration.createAnalysisRequestData(
                 "{uid}",
@@ -66,7 +90,7 @@ class IntegrationTest(unittest.TestCase):
                 {p1},
                 {p2},
                 {p3},
-                "Heartbeat-Demo-1",
+                "{analysis_type}",
                 {data_idx}
             );
         """
@@ -75,10 +99,11 @@ class IntegrationTest(unittest.TestCase):
             uid=user_id,
             iot_key=iot_key,
             alg=algorithm,
-            p1=json.dumps(p1_json),
-            p2=json.dumps(p2_json),
-            p3=json.dumps(p3_json),
-            data_idx=data_idx
+            p1=json.dumps(p1_key_json),
+            p2=json.dumps(p2_key_json),
+            p3=json.dumps(p3_key_json),
+            analysis_type=analysis_type,
+            data_idx=data_indices
         )
 
         root_file = Path("../client/integration_glue.html")
@@ -86,17 +111,45 @@ class IntegrationTest(unittest.TestCase):
 
         abs_path = root_file.absolute()
         self.firefox_driver.get("file://" + str(abs_path))
+
         try:
             self.firefox_driver.execute_script(script)
-        except:
-            self.assertTrue(False,msg=script)
+        except Exception as e:
+            import sys
+            sys.stderr.write(script)
+            sys.stderr.flush()
+            self.firefox_driver.close()
+            self.fail(msg="Webdriver threw exception :( {}".format(e))
 
-        c1_b64 = self.firefox_driver.execute_script("return window.integration.results.createAnalysisRequestData.c1;")
-        c2_b64 = self.firefox_driver.execute_script("return window.integration.results.createAnalysisRequestData.c2;")
-        c3_b64 = self.firefox_driver.execute_script("return window.integration.results.createAnalysisRequestData.c3;")
+        c1_b64: str = self.firefox_driver.execute_script(
+            "return window.integration.results.createAnalysisRequestData.c1;")
+        c2_b64: str = self.firefox_driver.execute_script(
+            "return window.integration.results.createAnalysisRequestData.c2;")
+        c3_b64: str = self.firefox_driver.execute_script(
+            "return window.integration.results.createAnalysisRequestData.c3;")
+
+        # Restore correct padding
+        c1_b64 = c1_b64.strip()
+        c1_b64 += "=" * ((4 - len(c1_b64)) % 4)
+        c1: bytes = base64.urlsafe_b64decode(c1_b64)
+
+        c2_b64 = c2_b64.strip()
+        c2_b64 += "=" * ((4 - len(c2_b64)) % 4)
+        c2: bytes = base64.urlsafe_b64decode(c2_b64)
+
+        c3_b64 = c3_b64.strip()
+        c3_b64 += "=" * ((4 - len(c3_b64)) % 4)
+        c3: bytes = base64.urlsafe_b64decode(c3_b64)
+
+        return c1,c2,c3
 
     @staticmethod
-    def pem_to_jwt(pem_path: Path):
+    def pem_to_jwt(pem_path: Path) -> Tuple[RSA.RsaKey, Dict]:
+        """
+        Takes a Path object parses the file it points to, and returns the RSAKey object and a JWK containing the public part
+        :param pem_path: the path to the PEM file
+        :return: RSAKey object containing the key and a json/dict containing the public info of the key
+        """
         assert pem_path.exists()
 
         with pem_path.open() as pem:
@@ -116,7 +169,7 @@ class IntegrationTest(unittest.TestCase):
             e_64 = e_64.rstrip("=")
             n_64 = n_64.rstrip("=")
 
-            return {
+            return pem_parsed, {
                 "kty": "RSA",
                 "alg": "RSA-OAEP-256",
                 "kid": "integration_test_key",

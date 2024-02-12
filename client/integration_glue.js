@@ -29,10 +29,13 @@ async function card_wrapper(userId, iotDeviceKey64, algorithm, party1PubkeyJSON,
     const view_c2 = new Uint8Array(c2);
     const view_c3 = new Uint8Array(c3);
 
+    console.log(view_c1)
+    console.log(view_c2)
+    console.log(view_c3)
     window.integration.results.createAnalysisRequestData = {
-        c1: btoa(view_c1),
-        c2: btoa(view_c2),
-        c3: btoa(view_c3)
+        c1: btoa(String.fromCharCode.apply(null, view_c1)),
+        c2: btoa(String.fromCharCode.apply(null, view_c2)),
+        c3: btoa(String.fromCharCode.apply(null, view_c3))
     }
 }
 
