@@ -10,7 +10,6 @@ class AnalysisApp:
     def __init__(self, config_path):
         self.config = Config(config_path)
         self.app = Flask(__name__)
-        self.sslify = SSLify(self.app)
         self.initialize()
 
     def initialize(self):
@@ -23,6 +22,7 @@ class AnalysisApp:
         # Set up routes for Flask app (you need to define your routes)
         @self.app.route('/analyse/', methods=['GET', 'POST'])
         def analyse():
+            print(request.headers.get('Content-Type'))
             if request.method == 'POST':
                 # Get JSON data from the request
                 data = request.get_json()
@@ -41,10 +41,11 @@ class AnalysisApp:
                     return jsonify(error="Invalid analysis_id/user_id. Please provide a valid UUIDv4."), 400
 
                 task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
-                return db.create_entry(analysis_id)
+                response = db.create_entry(analysis_id)
+                return jsonify(response[0]), response[1]
                       
                 
-            return render_template('index.html')
+            # return render_template('index.html')
 
         @self.app.route('/status', methods=['GET'])
         def get_analysis_status():

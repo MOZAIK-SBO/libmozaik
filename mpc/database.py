@@ -40,7 +40,7 @@ class Database:
                 ''', (analysis_id, 'Queuing'))
                 db_connection.commit()
                 db_connection.close()
-                return jsonify(status="Request added to the queue"), 201
+                return {"status": "Request added to the queue"}, 201
             else:
                 # If the entry exists, update it
                 db_cursor.execute('''
@@ -50,7 +50,7 @@ class Database:
                 ''', ('Queuing', analysis_id))
                 db_connection.commit()
                 db_connection.close()
-                return jsonify(status="A request with this ID had already been created, the previous result will be overwritten"), 202
+                return {"status": "A request with this ID had already been created, the previous result will be overwritten"}, 202
         except Exception as e:
             raise Exception(f"Error creating entry: {e}")
         finally:
@@ -62,9 +62,10 @@ class Database:
             db_connection = sqlite3.connect(self.db_path)
             db_cursor = db_connection.cursor()
             db_cursor.execute('''
-                INSERT INTO inference_results (analysis_id, status)
-                VALUES (?, ?)
-            ''', (analysis_id, status))
+                UPDATE inference_results
+                SET status = ?
+                WHERE analysis_id = ?
+            ''', (status, analysis_id))
             db_connection.commit()
             db_connection.close()
         except Exception as e:
@@ -77,13 +78,28 @@ class Database:
             # Insert the status message into the database
             db_connection = sqlite3.connect(self.db_path)
             db_cursor = db_connection.cursor()
-            db_cursor.execute('''
-                UPDATE inference_results
-                SET result = result || ?
-                WHERE analysis_id = ?
-            ''', (result, analysis_id))
-            db_connection.commit()
-            db_connection.close()
+
+            db_cursor.execute('SELECT * FROM inference_results WHERE analysis_id = ?', (analysis_id,))
+            existing_entry = db_cursor.fetchone()
+
+            if existing_entry[2] is None:
+                # If the entry doesn't exist, create it
+                db_cursor.execute('''
+                    UPDATE inference_results
+                    SET result = ?
+                    WHERE analysis_id = ?
+                ''', (result, analysis_id))
+                db_connection.commit()
+                db_connection.close()
+            else:
+                # If the entry exists, update it
+                db_cursor.execute('''
+                    UPDATE inference_results
+                    SET result = result || ?
+                    WHERE analysis_id = ?
+                ''', (result, analysis_id))
+                db_connection.commit()
+                db_connection.close()
         except Exception as e:
             raise Exception(f"Error rewriting entry: {e}")
         finally:
