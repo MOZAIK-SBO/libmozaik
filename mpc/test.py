@@ -1,3 +1,4 @@
+import os
 import unittest
 from Crypto.Cipher import AES
 from pathlib import Path
@@ -44,7 +45,7 @@ class TestDecryptKeyShare(unittest.TestCase):
         computed_key = bytearray(16)
         for i in range(16):
             computed_key[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
-        assert computed_key == TestDecryptKeyShare.expected_key
+        self.assertEqual(computed_key, TestDecryptKeyShare.expected_key, msg="Computed key does not match expected key")
 
     def test_params_dist_enc(self):
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(0))
@@ -77,14 +78,28 @@ class TestDecryptKeyShare(unittest.TestCase):
         ct, tag = instance.encrypt_and_digest(message)
         print(f'ct: {ct.hex()}')
         print(f'tag: {tag.hex()}')
-        
+
+
 class TestRep3Aes(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUp(cls):
         bin_path = Path('rep3aes/target/release/rep3-aes')
         # run cargo to compile Rep3Aes
-        subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True)
-        self.rep3aes_bin = str(bin_path)
-    
+        try:
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+        except FileNotFoundError:
+            # when rust is installed via rustup, it is often placed in the home directory which is not always
+            # part of PATH, so we need to add it before rebuilding
+            import sys
+            home = Path.home()
+            possible_paths = [home / ".cargo/bin"]
+            possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
+            os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+
+        cls.rep3aes_bin = str(bin_path)
+
+    @staticmethod
     def run_dist_enc(return_val, party, path_to_bin, key_share, message_share, user_id, analysis_type, computation_id):
         if party in [0,1,2]:
             config = f'rep3aes/p{party+1}.toml'
@@ -94,8 +109,9 @@ class TestRep3Aes(unittest.TestCase):
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(party))
         
         ct = dist_enc(rep3aes_config, keys, user_id, computation_id, analysis_type, key_share, message_share)
-        return_val[party] =  ct
+        return_val[party] = ct
 
+    @staticmethod
     def secret_share(data):
         r1 = secrets.token_bytes(len(data))
         r2 = secrets.token_bytes(len(data))
@@ -104,6 +120,7 @@ class TestRep3Aes(unittest.TestCase):
             r3[i] = data[i] ^ r1[i] ^ r2[i]
         return r1, r2, r3
 
+    @staticmethod
     def encode_ring_elements(elements):
         result_bytes = bytearray(len(elements) * 8)
         for (i, res) in enumerate(elements):
@@ -145,11 +162,12 @@ class TestRep3Aes(unittest.TestCase):
 
         # collect return values and check the ciphertext
         cts = [return_dict[i] for i in range(3)]
-        for ct in cts:
-            assert ct.hex() == expected_ct.hex() + expected_tag.hex()
+        for i, ct in enumerate(cts):
+            self.assertEqual(ct.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
 
+    @staticmethod
     def run_dist_dec(return_val, party, path_to_bin, key_share, ct, user_id):
-        if party in [0,1,2]:
+        if party in [0, 1, 2]:
             config = f'rep3aes/p{party+1}.toml'
         else:
             assert False
@@ -159,6 +177,7 @@ class TestRep3Aes(unittest.TestCase):
         return_val[party] =  message_share
 
     def test_dist_dec(self):
+
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         # create key shares
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
@@ -195,9 +214,9 @@ class TestRep3Aes(unittest.TestCase):
         reconstructed_message = bytearray(len(message))
         for i in range(len(message)):
             reconstructed_message[i] = m1[i] ^ m2[i] ^ m3[i]
-        assert message.hex() == reconstructed_message.hex()
-
+        self.assertEqual(message.hex(), reconstructed_message.hex(), msg="Reconstructed message did not match expected message.")
 
 
 if __name__ == '__main__':
+
     unittest.main()

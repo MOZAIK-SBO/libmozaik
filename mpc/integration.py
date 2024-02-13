@@ -93,7 +93,7 @@ class IntegrationTest(unittest.TestCase):
         # TODO: here comes decrypt_key_share
 
     def createAnalysisRequestHook(self, user_id, iot_key, algorithm, p1_key_json, p2_key_json,
-                                  p3_key_json, analysis_type, data_indices) -> Tuple[bytes,bytes,bytes]:
+                                  p3_key_json, analysis_type, data_indices) -> Tuple[bytes, bytes, bytes]:
         """
         Function that calls the method of the same name in JS and recovers the (hopefully correct) outputs
         :param _: all parameters play the same role as in the JS equivalent

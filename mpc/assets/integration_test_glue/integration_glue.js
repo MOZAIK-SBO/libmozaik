@@ -24,14 +24,13 @@ async function card_wrapper(userId, iotDeviceKey64, algorithm, party1PubkeyJSON,
     const dataIndices = dataIndicesSTR.map(date => Date.parse(date) / 1000);
 
     const [c1,c2,c3] = await createAnalysisRequestData(userId, iotDeviceKey,algorithm, party1PubKey, party2PubKey, party3PubKey, analysisType, dataIndices)
-    // TODO: check this
+
     const view_c1 = new Uint8Array(c1);
     const view_c2 = new Uint8Array(c2);
     const view_c3 = new Uint8Array(c3);
 
-    console.log(view_c1)
-    console.log(view_c2)
-    console.log(view_c3)
+    // create some global variables containing the base64 encoded results
+    // they will be read by selenium later on
     window.integration.results.createAnalysisRequestData = {
         c1: btoa(String.fromCharCode.apply(null, view_c1)),
         c2: btoa(String.fromCharCode.apply(null, view_c2)),
@@ -42,6 +41,4 @@ async function card_wrapper(userId, iotDeviceKey64, algorithm, party1PubkeyJSON,
 // To be able to call the module functions, we need to move them into the global scope
 // (We don't really need it, but it's the easiest way)
 window.integration.createAnalysisRequestData = card_wrapper;
-
-// TODO
 window.integration.reconstructResult = reconstructResult;
