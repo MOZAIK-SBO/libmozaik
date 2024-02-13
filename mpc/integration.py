@@ -61,7 +61,7 @@ class IntegrationTest(unittest.TestCase):
 
         algorithm = "AES-GCM-128"
         key_path = Path("assets/integration_test_keys")
-        analysis_type="Heartbeat-PoC"
+        analysis_type="Heartbeat-Demo-1"
 
         p1_key_path = key_path / "party_key_1.pem"
         p2_key_path = key_path / "party_key_2.pem"
