@@ -14,8 +14,9 @@ class MpcPartyKeys:
         assert len(self.party_keys) == 3
         assert self.party_keys[config['party_index']] == self.my_pub_key
 
-    def _load_public_key(path):
-        with open(path, 'r') as fp:
+    @staticmethod
+    def _load_public_key(path: str):
+        with open(path, "r") as fp:
             pk = RSA.import_key(fp.read())
             assert not pk.has_private()
             return pk

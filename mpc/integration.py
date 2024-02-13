@@ -1,16 +1,16 @@
 import unittest
 import json
 import base64
-import logging
 
+from datetime import datetime
 from typing import Dict, Tuple
 from math import log2, ceil
 from pathlib import Path
 
 from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-from Crypto.Hash import SHA256
+from key_share import MpcPartyKeys, decrypt_key_share
 
 
 class IntegrationTest(unittest.TestCase):
@@ -24,8 +24,9 @@ class IntegrationTest(unittest.TestCase):
             "security.fileuri.strict_origin_policy": False
         }
 
-        cls.firefox_options = webdriver.FirefoxOptions()
-        # cls.firefox_options.add_argument("--headless")
+        cls.firefox_options = Options()
+        cls.firefox_options.add_argument("--headless")
+        cls.firefox_options.add_argument('window-size=1920x1080')
 
         firefox_profile = webdriver.FirefoxProfile()
         for key, value in cls.opts_dict.items():
@@ -43,16 +44,20 @@ class IntegrationTest(unittest.TestCase):
 
         abs_path = root_file.absolute()
         self.firefox_driver.get("file://" + str(abs_path))
-        self.assertTrue("HTML" in self.firefox_driver.title.lower())
+        self.assertTrue("html" in self.firefox_driver.title.lower())
 
     def test_createAnalysisRequestData(self):
         """
         Checks whether the key shares created by the client can be decrypted by the server side
+        and checks whether the shares were set up properly
         """
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         data_idx = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03",
                     "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07",
                     "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
+        date_format = "%Y-%m-%dT%H:%M:%S"
+        date_parsed = [datetime.strptime(date, date_format) for date in data_idx]
+        date_timestamps = [round(date.timestamp()) for date in date_parsed]
 
         # normal values that are not part of the key dont need urlsafe base64 unlike the key. We love consistency :)))
         iot_key_bytes = bytes(
@@ -71,7 +76,19 @@ class IntegrationTest(unittest.TestCase):
         key2, p2_json = self.pem_to_jwt(p2_key_path)
         key3, p3_json = self.pem_to_jwt(p3_key_path)
 
-        c1,c2,c3 = self.createAnalysisRequestHook(user_id, iot_key, algorithm, p1_json, p2_json, p3_json, analysis_type, data_idx)
+        c1, c2, c3 = self.createAnalysisRequestHook(user_id, iot_key, algorithm, p1_json, p2_json, p3_json, analysis_type, data_idx)
+
+        ciphertexts = [c1,c2,c3]
+        shares = []
+        for i in range(3):
+            keys = MpcPartyKeys(IntegrationTest.get_config(i))
+            ct = ciphertexts[i]
+            key_share = decrypt_key_share(keys, user_id, "AES-GCM-128", date_timestamps, analysis_type, ct)
+            shares.append(key_share)
+
+        result = [a ^ b ^ c for a, b, c in zip(*shares)]
+        self.assertListEqual(list(result), list(iot_key_bytes))
+
 
         # TODO: here comes decrypt_key_share
 
@@ -141,7 +158,7 @@ class IntegrationTest(unittest.TestCase):
         c3_b64 += "=" * ((4 - len(c3_b64)) % 4)
         c3: bytes = base64.urlsafe_b64decode(c3_b64)
 
-        return c1,c2,c3
+        return c1, c2, c3
 
     @staticmethod
     def pem_to_jwt(pem_path: Path) -> Tuple[RSA.RsaKey, Dict]:
@@ -178,3 +195,14 @@ class IntegrationTest(unittest.TestCase):
                 "n": n_64,
                 "ext": True
             }
+    @staticmethod
+    def get_config(party_index):
+        party_keys = ['assets/integration_test_keys/party_key_pub_1.pem',
+                      'assets/integration_test_keys/party_key_pub_2.pem',
+                      'assets/integration_test_keys/party_key_pub_3.pem']
+        return {
+            "server_key": f'assets/integration_test_keys/party_key_{party_index+1}.pem',
+            "server_cert": f'assets/integration_test_keys/party_key_pub_{party_index+1}.pem',
+            "party_index": party_index,
+            "party_certs": party_keys
+        }
