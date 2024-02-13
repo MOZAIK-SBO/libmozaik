@@ -1,0 +1,98 @@
+https://plantuml.com/
+@startuml
+autonumber "<b>[M##]"
+participant Iot as iot
+database Obelisk as obelisk
+participant Client as client
+participant "MPC Webserver" as mpcweb
+participant "Oblivious AES" as obvaes
+participant "PPML" as ppml
+
+ == Data Collection ==
+-> iot: data d
+iot -> iot: protect(..)
+iot -> obelisk: /ingest
+
+ == Analysis ==
+client -> client: CreateAnalysisRequestData(..)
+client -> obelisk: /prepareAnalysis
+obelisk -> mpcweb: /analyse
+activate mpcweb
+note right
+  {
+    "analysis_id": string,
+    "user_id": string,
+    "data_index": number[],
+    "analysis_type": string,
+    <color #red>"parties": string (base64)[],</color>
+  }
+end note
+mpcweb -> obelisk: /getKeyShare
+note left
+  {
+    "analysis_id": string,
+  }
+end note
+obelisk --> mpcweb: c_k
+mpcweb -> mpcweb: DecryptKeyShare(..)
+mpcweb -> obelisk: /getData
+note left
+  {
+    "user_id": string,
+    "data_index": number[],
+  }
+end note
+obelisk --> mpcweb: c_1, ..., c_M
+
+mpcweb -> obvaes: DistributedDecryption(..)
+activate obvaes
+obvaes --> mpcweb: <d_1>, ..., <d_M>
+deactivate obvaes
+
+mpcweb -> ppml: Infer(..)
+activate ppml
+ppml --> mpcweb: <o_1>, ..., <o_M>
+deactivate ppml
+
+mpcweb -> obvaes: DistributedEncryption(..)
+activate obvaes
+obvaes --> mpcweb: c
+deactivate obvaes
+
+mpcweb -> obelisk: /storeResult
+note left
+  {
+    "analysis_id": string,
+    "user_id": string,
+    "result": string (base64)
+  }
+end note
+deactivate mpcweb
+
+ == Fetch Result ==
+
+client -> obelisk: /getResult
+client -> client: ReconstructResult
+
+  == other ==
+
+obelisk -> mpcweb: /status
+activate mpcweb
+note right
+  {
+    "analysis_id": string,
+  }
+end note
+mpcweb --> obelisk: queued / running / completed
+deactivate mpcweb
+|||
+obelisk -> mpcweb: /setModelWeights
+activate mpcweb
+note right
+  {
+    "analysis_type": string,
+    "weights": number[],
+  }
+end note
+deactivate mpcweb
+@enduml
