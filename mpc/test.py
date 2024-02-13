@@ -228,7 +228,6 @@ class TestRep3Aes(unittest.TestCase):
             reconstructed_message[i] = m1[i] ^ m2[i] ^ m3[i]
         self.assertEqual(message.hex(), reconstructed_message.hex(), msg="Reconstructed message did not match expected message.")
 
-M
 class IntegrationTest(unittest.TestCase):
     __slots__ = ["opts_dict", "firefox_options", "firefox_driver"]
 
