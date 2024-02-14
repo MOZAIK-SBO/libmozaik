@@ -103,6 +103,19 @@ class TestRep3Aes(unittest.TestCase):
             r3[i] = data[i] ^ r1[i] ^ r2[i]
         return r1, r2, r3
 
+    def secret_share_ring(data):
+        share1 = list()
+        share2 = list()
+        share3 = list()
+        for d in data:
+            r1 = secrets.randbelow(2**64)
+            r2 = secrets.randbelow(2**64)
+            r3 = (d - r1 - r2) % 2**64
+            share1.append((r1, r2))
+            share2.append((r2, r3))
+            share3.append((r3, r1))
+        return (share1, share2, share3)
+
     def encode_ring_elements(elements):
         result_bytes = bytearray(len(elements) * 8)
         for (i, res) in enumerate(elements):
@@ -122,7 +135,7 @@ class TestRep3Aes(unittest.TestCase):
 
         # create key and message shares
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
-        m1, m2, m3 = TestRep3Aes.secret_share(result_bytes)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         return_dict = dict()
 
@@ -163,7 +176,8 @@ class TestRep3Aes(unittest.TestCase):
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
 
         # create a message of 187 64-bit values in little endian
-        message = secrets.token_bytes(187 * 8)
+        ring_message = [secrets.randbelow(2**64) for _ in range(187)]
+        message = TestRep3Aes.encode_ring_elements(ring_message)
         nonce = bytes.fromhex('157316abe528fe29d4716781')
         ad = bytes(user_id, encoding='utf-8') + nonce
         instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
@@ -187,15 +201,17 @@ class TestRep3Aes(unittest.TestCase):
         m1 = return_dict[0]
         m2 = return_dict[1]
         m3 = return_dict[2]
-        assert len(m1) == len(message)
-        assert len(m2) == len(message)
-        assert len(m3) == len(message)
+        assert len(m1) == 187
+        assert len(m2) == 187
+        assert len(m3) == 187
 
-        reconstructed_message = bytearray(len(message))
-        for i in range(len(message)):
-            reconstructed_message[i] = m1[i] ^ m2[i] ^ m3[i]
-        assert message.hex() == reconstructed_message.hex()
-
+        for i in range(187):
+            # check consistent
+            assert len(m1[i]) == 2 and len(m2[i]) == 2 and len(m3[i]) == 2
+            assert m1[i][0] == m3[i][1]
+            assert m1[i][1] == m2[i][0]
+            assert m2[i][1] == m3[i][0]
+            assert ring_message[i] == (( m1[i][0] + m2[i][0] + m3[i][0]) % 2**64)
 
 
 if __name__ == '__main__':
