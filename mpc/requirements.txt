@@ -2,3 +2,4 @@ pycryptodome==3.19.1
 Flask==2.3.3
 Flask-SSLify==0.1.5
 tomli==2.0.1
+selenium>=4.6.0

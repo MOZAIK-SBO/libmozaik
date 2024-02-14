@@ -83,6 +83,8 @@ async function testCreateAnalysisRequestData() {
   const pk2 = await importRsaKey(mpc2Pubkey);
   const pk3 = await importRsaKey(mpc3Pubkey);
 
+
+
   const cts = await createAnalysisRequestData(userId, iotDeviceKey, "AES-GCM-128", pk1, pk2, pk3, "Heartbeat-Demo-1", dataIndices);
 
   console.log(bufferToHex(cts[0]));
