@@ -1,4 +1,5 @@
 import sqlite3
+import os
 from flask import jsonify
 
 class Database:
@@ -132,3 +133,8 @@ class Database:
             raise Exception(f"Error deleting entry: {e}")
         finally:
             db_connection.close()
+
+    def delete_database(self):
+        # Delete the database file if it exists
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)

@@ -5,24 +5,23 @@ import uuid
 from config import Config
 from task_manager import TaskManager
 from database import Database
+from rep3aes import Rep3AesConfig
 
 class AnalysisApp:
     def __init__(self, config_path):
         self.config = Config(config_path)
+        self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes')
         self.app = Flask(__name__)
+        self.db = Database('ecg_inference_database.db')
         self.initialize()
 
     def initialize(self):
-        # Initialize a database
-        db = Database('ecg_inference_database.db')
-
         # Initialize the task manager
-        task_manager = TaskManager(self.app, db, self.config.CONFIG_PARTY_INDEX)
+        task_manager = TaskManager(self.app, self.db, self.config, self.aes_config)
 
         # Set up routes for Flask app (you need to define your routes)
         @self.app.route('/analyse/', methods=['GET', 'POST'])
         def analyse():
-            print(request.headers.get('Content-Type'))
             if request.method == 'POST':
                 # Get JSON data from the request
                 data = request.get_json()
@@ -37,11 +36,11 @@ class AnalysisApp:
                 try:
                     request_uuid = uuid.UUID(analysis_id, version=4)
                     # user_uuid = uuid.UUID(user_id, version=4)
-                except TypeError:
-                    return jsonify(error="Invalid analysis_id/user_id. Please provide a valid UUIDv4."), 400
+                except ValueError as e:
+                    return jsonify(error=f"Invalid analysis_id/user_id. Please provide a valid UUIDv4. {e}"), 400
 
-                task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
-                response = db.create_entry(analysis_id)
+                # task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
+                response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
                       
                 
@@ -62,10 +61,10 @@ class AnalysisApp:
             # Validate analysis_id as a UUIDv4
             try:
                 request_uuid = uuid.UUID(analysis_id, version=4)
-            except TypeError:
-                return jsonify(error="Invalid analysis_id. Please provide a valid UUIDv4."), 400
+            except ValueError as e:
+                    return jsonify(error=f"Invalid analysis_id. Please provide a valid UUIDv4. {e}"), 400
             
-            db_entry =  db.read_entry(analysis_id)
+            db_entry =  self.db.read_entry(analysis_id)
         
             if db_entry is None:
                 # If the entry does not exist, return an error
@@ -96,7 +95,7 @@ class AnalysisApp:
             
             elif status.startswith('Sent'):
                 # If it starts with 'Sent', return 'COMPLETED' and delete the entry
-                db.delete_entry(analysis_id)
+                self.db.delete_entry(analysis_id)
                 return jsonify(type="COMPLETED", details = "Computation completed and result was successfully sent to Obelisk. The DB entry of this analysis is now deleted."), 200
 
             elif not status.strip():
@@ -106,7 +105,7 @@ class AnalysisApp:
             else:
                 return jsonify(type="FAILED", details = f'Troubleshooting required. Consult the database entry: {status} and result: {result}'), 500
 
-   
+
     def start_background_thread(self):
         # Run the Flask app
         if __name__ == '__main__':

@@ -4,12 +4,16 @@ import struct
 import os
 import subprocess
 from mozaik_obelisk import MozaikObelisk
+from rep3aes import dist_dec, dist_enc
 
 class TaskManager:
-    def __init__(self, app, db, party_index):
+    def __init__(self, app, db, config, aes_config):
         self.app = app
         self.db = db
-        self.party_index = party_index
+        self.config = config
+        self.aes_config = aes_config
+        #Hardcode the pks of the parties
+        self.keys = ['tls_certs/server1.crt', 'tls_certs/server2.crt', 'tls_certs/server3.crt'] 
 
         self.request_queue = queue.Queue()
 
@@ -19,7 +23,7 @@ class TaskManager:
 
         self.mozaik_obelisk = MozaikObelisk('127.0.0.1')
         self.request_lock = threading.Lock()
-        self.sharesfile = f'Persistence/Transactions-P{self.party_index}.data'
+        self.sharesfile = f'MP-SPDZ/Persistence/Transactions-P{self.config.CONFIG_PARTY_INDEX}.data'
         self.batch_size = 128
 
 
@@ -63,7 +67,7 @@ class TaskManager:
                     file_size = os.path.getsize(self.sharesfile)
 
                     # Calculate the start position for reading the last 80 bytes
-                    start_position = max(0, file_size - 80)
+                    start_position = min(28, file_size)
 
                     # Move the file pointer to the start position
                     binary_file.seek(start_position)
@@ -78,7 +82,7 @@ class TaskManager:
                         output_shares.append(value)
 
                     # Convert the output shares to a string for storage in the database
-                    result_str = ' '.join(map(str, output_shares[0::2]))
+                    result_str = ' '.join(map(str, output_shares[0::1]))
 
                     return result_str
 
@@ -89,13 +93,6 @@ class TaskManager:
                 self.error_in_task(analysis_id, 500, f"Unable to interpret the result: {e}")
         else:
             self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
-
-
-    def run_distributed_decryption(self, analysis_id, input_array):
-        return None
-
-    def run_distributed_encryption(self, analysis_id, input_array):
-        return None
     
     def run_conversion_B2A(self, analysis_id, shares):
         return None
@@ -103,10 +100,10 @@ class TaskManager:
     def run_conversion_A2B(self, analysis_id, shares):
         return None
     
-    def run_inference(self, analysis_id):
+    def run_inference(self, analysis_id, program = 'heartbeat_inference_demo'):
         try:
             print("Starting computation")
-            result = subprocess.run(['./malicious-rep-ring-party.x', '-ip', 'HOSTS', '-p', str(self.party_index), 'heartbeat_inference_demo'],
+            result = subprocess.run(['MP-SPDZ/Scripts/../malicious-rep-ring-party.x', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
                                     capture_output=True, text=True, check=False)
             print("Finished computation")
             
@@ -140,7 +137,7 @@ class TaskManager:
                         elif status == "Error":
                             self.error_in_task(analysis_id, response.status_code, response.text)
                         elif status == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {e}')  
+                            self.error_in_task(analysis_id, 500,f'RequestException: {response}')  
 
                         # Get the shares of the key 
                         status, response = self.mozaik_obelisk.get_key_share(analysis_id)
@@ -166,7 +163,7 @@ class TaskManager:
                                 sample = input_array[i*187:i*187+187]
 
                                 # Run distributed decryption algorithm on the received encrypted sample
-                                decrypted_shares = self.run_distributed_decryption(analysis_id, sample)  
+                                decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
                                 # Convert boolean shares in a field to arithmetic in a ring mod 2^64
                                 self.run_conversion_B2A(analysis_id, decrypted_shares)
@@ -184,7 +181,7 @@ class TaskManager:
                                 shares_to_encrypt = self.run_conversion_A2B(analysis_id, shares_to_convert)
 
                                 # Run distributed encryption on the final result
-                                encrypted_shares = self.run_distributed_encryption(analysis_id, shares_to_encrypt)
+                                encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
 
                                 # Append the encrypted result to the database
                                 self.db.append_result(analysis_id, encrypted_shares)
@@ -210,7 +207,7 @@ class TaskManager:
                         # Remove the request from the queue after processing
                         self.request_queue.task_done()
                 else:
-                    self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "ecg_inference".')
+                    self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
             except Exception as e:
                 if analysis_id != None:
                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
