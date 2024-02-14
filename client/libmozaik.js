@@ -14,6 +14,7 @@ function append(arrays) {
 
 async function pkEnc(share, pubKey, pubKeyBuf, context) {
     const label = append([context, pubKeyBuf]);
+    console.log(share)
     return crypto.encrypt({name: "RSA-OAEP", label: label}, pubKey, share);
 }
 
@@ -85,3 +86,4 @@ export async function reconstructResult(userId, iotDeviceKey, party1Pubkey, part
     const msg = await crypto.decrypt({name: "AES-GCM", iv: fullNonce.slice(0,12), additionalData: context, tagLength: 128}, key, encryptedResult);
     return msg;
 }
+

@@ -15,10 +15,12 @@ permissions:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install firefox
+      run: sudo apt install -y firefox
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
