@@ -294,7 +294,7 @@ class IntegrationTest(unittest.TestCase):
         date_parsed = [datetime.strptime(date, date_format) for date in data_idx]
         date_timestamps = [round(date.timestamp()) for date in date_parsed]
 
-        # normal values that are not part of the key dont need urlsafe base64 unlike the key. We love consistency :)))
+        # normal values that are not part of the key don't need urlsafe base64 unlike the key. We love consistency :)))
         iot_key_bytes = bytes(
             [0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01])
         iot_key = base64.b64encode(iot_key_bytes).decode("ascii").rstrip("=")
@@ -318,7 +318,7 @@ class IntegrationTest(unittest.TestCase):
         for i in range(3):
             keys = MpcPartyKeys(IntegrationTest.get_config(i))
             ct = ciphertexts[i]
-            key_share = decrypt_key_share(keys, user_id, "AES-GCM-128", date_timestamps, analysis_type, ct)
+            key_share = decrypt_key_share(keys, user_id, algorithm, date_timestamps, analysis_type, ct)
             shares.append(key_share)
 
         result = [a ^ b ^ c for a, b, c in zip(*shares)]
