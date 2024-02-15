@@ -355,7 +355,7 @@ class IntegrationTest(unittest.TestCase):
 
         # create key and message shares
         k1, k2, k3 = TestRep3Aes.secret_share(iot_key_bytes)
-        m1, m2, m3 = TestRep3Aes.secret_share(result_bytes)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         # tls_certs/server{party_index+1}.key
         key_path = Path("./tls_certs/")
@@ -431,7 +431,7 @@ class IntegrationTest(unittest.TestCase):
             self.firefox_driver.close()
             self.fail(msg="Webdriver threw exception :( {}".format(e))
 
-        self.firefox_driver.implicitly_wait(0.1)
+        self.firefox_driver.implicitly_wait(1)
         pt64: str = self.firefox_driver.execute_script(
             "return window.integration.results.reconstructResult;")
 
@@ -488,7 +488,7 @@ class IntegrationTest(unittest.TestCase):
             self.firefox_driver.close()
             self.fail(msg="Webdriver threw exception :( {}".format(e))
 
-        self.firefox_driver.implicitly_wait(0.1)
+        self.firefox_driver.implicitly_wait(1)
 
         c1_b64: str = self.firefox_driver.execute_script(
             "return window.integration.results.createAnalysisRequestData.c1;")
