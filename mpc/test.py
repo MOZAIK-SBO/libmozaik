@@ -21,7 +21,6 @@ from selenium.webdriver.firefox.options import Options
 from key_share import MpcPartyKeys, decrypt_key_share, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig, dist_enc, dist_dec
 
-
 class TestDecryptKeyShare(unittest.TestCase):
     @staticmethod
     def get_config(party_index):
@@ -132,6 +131,20 @@ class TestRep3Aes(unittest.TestCase):
             r3[i] = data[i] ^ r1[i] ^ r2[i]
         return r1, r2, r3
 
+    @staticmethod	
+    def secret_share_ring(data):
+        share1 = list()
+        share2 = list()
+        share3 = list()
+        for d in data:
+            r1 = secrets.randbelow(2**64)
+            r2 = secrets.randbelow(2**64)
+            r3 = (d - r1 - r2) % 2**64
+            share1.append((r1, r2))
+            share2.append((r2, r3))
+            share3.append((r3, r1))
+        return (share1, share2, share3)
+
     @staticmethod
     def encode_ring_elements(elements):
         result_bytes = bytearray(len(elements) * 8)
@@ -152,7 +165,7 @@ class TestRep3Aes(unittest.TestCase):
 
         # create key and message shares
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
-        m1, m2, m3 = TestRep3Aes.secret_share(result_bytes)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         return_dict = dict()
 
@@ -189,13 +202,13 @@ class TestRep3Aes(unittest.TestCase):
         return_val[party] =  message_share
 
     def test_dist_dec(self):
-
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         # create key shares
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
 
         # create a message of 187 64-bit values in little endian
-        message = secrets.token_bytes(187 * 8)
+        ring_message = [secrets.randbelow(2**64) for _ in range(187)]
+        message = TestRep3Aes.encode_ring_elements(ring_message)
         nonce = bytes.fromhex('157316abe528fe29d4716781')
         ad = bytes(user_id, encoding='utf-8') + nonce
         instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
@@ -219,22 +232,23 @@ class TestRep3Aes(unittest.TestCase):
         m1 = return_dict[0]
         m2 = return_dict[1]
         m3 = return_dict[2]
-        assert len(m1) == len(message)
-        assert len(m2) == len(message)
-        assert len(m3) == len(message)
+        assert len(m1) == 187
+        assert len(m2) == 187
+        assert len(m3) == 187
 
-        reconstructed_message = bytearray(len(message))
-        for i in range(len(message)):
-            reconstructed_message[i] = m1[i] ^ m2[i] ^ m3[i]
-        self.assertEqual(message.hex(), reconstructed_message.hex(), msg="Reconstructed message did not match expected message.")
-
+        for i in range(187):
+            # check consistent
+            assert len(m1[i]) == 2 and len(m2[i]) == 2 and len(m3[i]) == 2
+            assert m1[i][0] == m3[i][1]
+            assert m1[i][1] == m2[i][0]
+            assert m2[i][1] == m3[i][0]
+            self.assertEqual(ring_message[i], ( m1[i][0] + m2[i][0] + m3[i][0]) % 2**64, msg="Reconstructed message did not match expected message.")
 
 class IntegrationTest(unittest.TestCase):
     __slots__ = ["opts_dict", "firefox_options", "firefox_driver", "rep3aes_bin"]
 
     @classmethod
-    def setUp(cls):
-
+    def setUpClass(cls):
         # Set up Selenium
         cls.opts_dict = {
             "general.warnOnAboutConfig": False,
@@ -268,6 +282,11 @@ class IntegrationTest(unittest.TestCase):
             subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
 
         cls.rep3aes_bin = str(bin_path)
+    
+    @classmethod
+    def tearDownClass(cls):
+        # close and quit selenium
+        cls.firefox_driver.quit()
 
     def test_trivial(self):
         """
@@ -340,7 +359,7 @@ class IntegrationTest(unittest.TestCase):
 
         # create key and message shares
         k1, k2, k3 = TestRep3Aes.secret_share(iot_key_bytes)
-        m1, m2, m3 = TestRep3Aes.secret_share(result_bytes)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         # tls_certs/server{party_index+1}.key
         key_path = Path("./tls_certs/")
@@ -375,6 +394,13 @@ class IntegrationTest(unittest.TestCase):
             res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
+
+    def block_until_nonempty(self, script):
+        res = self.firefox_driver.execute_script(script)
+        while res == None:
+            self.firefox_driver.implicitly_wait(0.1)
+            res = self.firefox_driver.execute_script(script)
+        return res
 
     def reconstructResultHook(self, user_id, iot_key,  p1_key_json, p2_key_json,
                                   p3_key_json, computation_id, analysis_type, encrypted_result) -> bytes:
@@ -416,8 +442,8 @@ class IntegrationTest(unittest.TestCase):
             self.firefox_driver.close()
             self.fail(msg="Webdriver threw exception :( {}".format(e))
 
-        self.firefox_driver.implicitly_wait(0.1)
-        pt64: str = self.firefox_driver.execute_script(
+        self.firefox_driver.implicitly_wait(1)
+        pt64: str = self.block_until_nonempty(
             "return window.integration.results.reconstructResult;")
 
         # Restore correct padding
@@ -473,13 +499,13 @@ class IntegrationTest(unittest.TestCase):
             self.firefox_driver.close()
             self.fail(msg="Webdriver threw exception :( {}".format(e))
 
-        self.firefox_driver.implicitly_wait(0.1)
+        self.firefox_driver.implicitly_wait(1)
 
-        c1_b64: str = self.firefox_driver.execute_script(
+        c1_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c1;")
-        c2_b64: str = self.firefox_driver.execute_script(
+        c2_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c2;")
-        c3_b64: str = self.firefox_driver.execute_script(
+        c3_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c3;")
 
         # Restore correct padding
