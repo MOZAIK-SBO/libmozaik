@@ -5,7 +5,6 @@ import json
 import secrets
 import subprocess
 import base64
-import time
 
 from pathlib import Path
 from math import log2, ceil
@@ -249,8 +248,7 @@ class IntegrationTest(unittest.TestCase):
     __slots__ = ["opts_dict", "firefox_options", "firefox_driver", "rep3aes_bin"]
 
     @classmethod
-    def setUp(cls):
-
+    def setUpClass(cls):
         # Set up Selenium
         cls.opts_dict = {
             "general.warnOnAboutConfig": False,
@@ -284,6 +282,11 @@ class IntegrationTest(unittest.TestCase):
             subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
 
         cls.rep3aes_bin = str(bin_path)
+    
+    @classmethod
+    def tearDownClass(cls):
+        # close and quit selenium
+        cls.firefox_driver.quit()
 
     def test_trivial(self):
         """
