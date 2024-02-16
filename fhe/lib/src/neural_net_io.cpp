@@ -9,6 +9,7 @@
 #include <cassert>
 #include <fstream>
 #include <algorithm>
+#include <iostream>
 
 
 #include "json.hpp"
@@ -18,9 +19,11 @@ using json = nlohmann::json;
 
 namespace ckks_nn {
 
-    NeuralNet::NeuralNet(std::string &path) {
+    NeuralNet::NeuralNet(const std::string& config_dir_path, const std::string& config_name) {
 
-        std::ifstream config_stream(path);
+        auto config_path = config_dir_path + config_name;
+
+        std::ifstream config_stream(config_path);
         json config = json::parse(config_stream);
 
         int_type n_layers = config["n_layers"];
@@ -52,8 +55,8 @@ namespace ckks_nn {
             m_biases[layer_idx].reserve(rows);
 
             // paths to weight / bias matrices
-            std::string layer_weight_path = current_layer_config["weight_path"];
-            std::string layer_bias_path = current_layer_config["bias_path"];
+            std::string layer_weight_path = config_dir_path + current_layer_config["weight_path"].get<std::string>();
+            std::string layer_bias_path = config_dir_path + current_layer_config["bias_path"].get<std::string>();
 
             read_weights(layer_weight_path, layer_idx);
             read_biases(layer_bias_path, layer_idx);
@@ -68,17 +71,42 @@ namespace ckks_nn {
     }
 
     void NeuralNet::read_weights(std::string &weight_path, int_type layer) {
-        // TODO
+        std::ifstream weight_file(weight_path);
+
+        auto rows = m_weight_dims[layer].first;
+        auto cols = m_weight_dims[layer].second;
+
+        std::string line_buffer;
+        int_type pos = 0;
+        while (std::getline(weight_file, line_buffer)) {
+            std::istringstream line_stream(line_buffer);
+            // people claim that this works
+            for(int_type col = 0; col < cols; col++) {
+                line_stream >> m_weights[layer][pos++];
+            }
+        }
     }
 
 
     void NeuralNet::read_biases(std::string &bias_path, int_type layer) {
-        // TODO
+        std::ifstream bias_stream(bias_path);
+
+        std::string line_buffer;
+        int_type pos = 0;
+        auto rows = m_weight_dims[layer].first;
+
+        for(int_type row = 0; row < rows; row++) {
+            std::getline(bias_stream, line_buffer);
+            m_biases[layer][pos++] = std::stod(line_buffer);
+        }
+
+        assert(pos == m_weight_dims[layer].first);
     }
 
     NeuralNet::Activation NeuralNet::lookup_activation_string(std::string &activation_string) {
         // why create a string type, but no tolower for the string...
         std::transform(activation_string.begin(), activation_string.end(), activation_string.begin(), ::tolower);
+        // switch for strings would also be nice, and its definitely possible, just do a byte for byte comparison with rep (x86)
         if (activation_string == "relu") {
             return Activation::RELU;
         }
