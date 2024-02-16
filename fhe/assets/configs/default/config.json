@@ -1,0 +1,35 @@
+{
+  "n_layers": 5,
+  "layers" : [
+    {
+      "dims" : [187, 50],
+      "weight_path": "weights_0_relu.txt",
+      "bias_path": "biases_0_relu.txt",
+      "activation": "relu"
+    },
+    {
+      "dims" : [50, 50],
+      "weight_path": "weights_1_relu.txt",
+      "bias_path": "biases_1_relu.txt",
+      "activation": "relu"
+    },
+    {
+      "dims" : [50, 50],
+      "weight_path": "weights_2_relu.txt",
+      "bias_path": "biases_2_relu.txt",
+      "activation": "relu"
+    },
+    {
+      "dims" : [50, 50],
+      "weight_path": "weights_3_relu.txt",
+      "bias_path": "biases_3_relu.txt",
+      "activation": "relu"
+    },
+    {
+      "dims" : [50, 5],
+      "weight_path": "weights_4_relu.txt",
+      "bias_path": "biases_4_relu.txt",
+      "activation": "softmax"
+    }
+  ]
+}

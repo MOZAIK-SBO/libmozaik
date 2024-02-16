@@ -21,7 +21,7 @@ namespace ckks_nn {
             SOFTMAX
         };
 
-        explicit NeuralNet(std::string& path);
+        explicit NeuralNet(const std::string& config_dir_path = "assets/configs/default/", const std::string& config_name = "config.json");
 
         double get_weight(int_type layer, int_type row, int_type col);
 
