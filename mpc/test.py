@@ -5,6 +5,7 @@ import json
 import secrets
 import subprocess
 import base64
+import time
 
 from pathlib import Path
 from math import log2, ceil
@@ -391,6 +392,13 @@ class IntegrationTest(unittest.TestCase):
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
 
+    def block_until_nonempty(self, script):
+        res = self.firefox_driver.execute_script(script)
+        while res == None:
+            self.firefox_driver.implicitly_wait(0.1)
+            res = self.firefox_driver.execute_script(script)
+        return res
+
     def reconstructResultHook(self, user_id, iot_key,  p1_key_json, p2_key_json,
                                   p3_key_json, computation_id, analysis_type, encrypted_result) -> bytes:
         script_template = """
@@ -432,7 +440,7 @@ class IntegrationTest(unittest.TestCase):
             self.fail(msg="Webdriver threw exception :( {}".format(e))
 
         self.firefox_driver.implicitly_wait(1)
-        pt64: str = self.firefox_driver.execute_script(
+        pt64: str = self.block_until_nonempty(
             "return window.integration.results.reconstructResult;")
 
         # Restore correct padding
@@ -490,11 +498,11 @@ class IntegrationTest(unittest.TestCase):
 
         self.firefox_driver.implicitly_wait(1)
 
-        c1_b64: str = self.firefox_driver.execute_script(
+        c1_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c1;")
-        c2_b64: str = self.firefox_driver.execute_script(
+        c2_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c2;")
-        c3_b64: str = self.firefox_driver.execute_script(
+        c3_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c3;")
 
         # Restore correct padding
