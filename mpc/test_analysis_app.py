@@ -1,11 +1,16 @@
 import unittest
+from unittest.mock import patch
 from analysis_app import AnalysisApp  
 
 class AnalysisAppTests(unittest.TestCase):
     def setUp(self):
-        self.app = AnalysisApp('server0.toml')
-        self.client = self.app.app.test_client()
-        self.app.start_background_thread()
+        with patch('analysis_app.TaskManager') as MockTaskManager:
+            # Mocking the process_requests method of TaskManager with a no-op function
+            MockTaskManager.return_value.process_requests = None
+            # Create the AnalysisApp instance
+            self.app = AnalysisApp('server0.toml')
+            self.client = self.app.app.test_client()
+            self.app.start_background_thread()
 
     def tearDown(self):
         self.app.db.delete_database()

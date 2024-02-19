@@ -21,29 +21,34 @@ class TaskManager:
         self.request_thread.daemon = True
         self.request_thread.start()   
 
-        self.mozaik_obelisk = MozaikObelisk('127.0.0.1')
+        self.mozaik_obelisk = MozaikObelisk('http://127.0.0.1')
         self.request_lock = threading.Lock()
         self.sharesfile = f'MP-SPDZ/Persistence/Transactions-P{self.config.CONFIG_PARTY_INDEX}.data'
         self.batch_size = 128
 
 
-    def write_shares(self, analysis_id, data):
+    def write_shares(self, analysis_id, data, append=False):
         """
         Takes as input a vector of rss shares in ring mod 2^64, encodes and writes the values to a file for MP-SPDZ readability.
         """
         # Define the data to be written at the beginning
         header_data = bytearray([
-            0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x72, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74,
-            0x65, 0x64, 0x20, 0x5a, 0x32, 0x5e, 0x36, 0x34,
-            0x40, 0x00, 0x00, 0x00
+            0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x6d, 0x61, 0x6c, 0x69, 0x63, 0x69, 0x6f, 0x75, 
+            0x73, 0x20, 0x72, 0x65, 0x70, 0x6c, 0x69, 0x63,
+            0x61, 0x74, 0x65, 0x64, 0x20, 0x5a, 0x32, 0x5e, 
+            0x36, 0x34, 0x40, 0x00, 0x00, 0x00
         ])
+
+        # Open the binary file in write or append mode
+        mode = 'ab' if append else 'wb'
 
         # Open the binary file in write mode
         if os.path.exists(self.sharesfile):
-            with open(self.sharesfile, 'wb') as file:
+            with open(self.sharesfile, mode) as file:
                 # Write the header data at the beginning of the file
-                file.write(header_data)
+                if not append:
+                    file.write(header_data)
                 # Encode and write the input 64-bit integers in little endian format
                 for rss_share in data:
                     for share in rss_share:
@@ -67,24 +72,21 @@ class TaskManager:
                     file_size = os.path.getsize(self.sharesfile)
 
                     # Calculate the start position for reading the last 80 bytes
-                    start_position = min(28, file_size)
+                    start_position = min(38, file_size)
 
                     # Move the file pointer to the start position
                     binary_file.seek(start_position)
 
                     # Read the last 80 bytes
-                    last_80_bytes = binary_file.read()
+                    content = binary_file.read()
 
                     # Convert the last 80 bytes to a list of integers in little-endian format
                     output_shares = []
-                    for i in range(0, len(last_80_bytes), 8):
-                        value = struct.unpack('<q', last_80_bytes[i:i+8])[0]
-                        output_shares.append(value)
+                    for i in range(0, len(content), 16):  # Group every 16 bytes together
+                        values = struct.unpack('<qq', content[i:i+16])  # Unpack 16 bytes into 2 `q` (8-byte signed integers)
+                        output_shares.append(list(values))  # Append the values as a list to output_shares
 
-                    # Convert the output shares to a string for storage in the database
-                    result_str = ' '.join(map(str, output_shares[0::1]))
-
-                    return result_str
+                    return output_shares
 
                     # Insert the result into the database
                     # self.db.append_result(analysis_id, result_str)
@@ -93,12 +95,7 @@ class TaskManager:
                 self.error_in_task(analysis_id, 500, f"Unable to interpret the result: {e}")
         else:
             self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
-    
-    def run_conversion_B2A(self, analysis_id, shares):
-        return None
-    
-    def run_conversion_A2B(self, analysis_id, shares):
-        return None
+
     
     def run_inference(self, analysis_id, program = 'heartbeat_inference_demo'):
         try:
@@ -114,6 +111,31 @@ class TaskManager:
         except subprocess.CalledProcessError as e:
             self.error_in_task(analysis_id, 500, f"Error running program {e}")
 
+    def read_model_from_file(self, file_path):
+        """
+        Reads data from a file where each line contains pairs of integers separated by commas.
+        """
+        data = []
+        with open(file_path, 'r') as file:
+            for line in file:
+                pairs = line.strip().split()
+                pairs = [tuple(map(int, pair.split(','))) for pair in pairs]
+                data.append(pairs)
+        return data
+
+    def set_model(self, analysis_id, analysis_type):
+        if analysis_type == "Heartbeat-Demo-1":
+            model=[]
+            weights = self.read_model_from_file(f'heartbeat-inference-model/model_shares{self.config.CONFIG_PARTY_INDEX}.txt')
+            biases = self.read_model_from_file(f'heartbeat-inference-model/biases_shares{self.config.CONFIG_PARTY_INDEX}.txt')
+            for weight_pair in weights[0]:
+                model.append(weight_pair)
+            for biases_pair in biases[0]:
+                model.append(biases_pair)
+            self.write_shares(analysis_id, model)
+        else:
+            self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
+
 
     def error_in_task(self, analysis_id, code, message):
         self.db.set_status(analysis_id, f'ERROR:{code}:{message}')
@@ -128,6 +150,9 @@ class TaskManager:
                 if analysis_type == "Heartbeat-Demo-1":
                     # Lock to ensure thread safety
                     with self.request_lock:
+                        # Set the model accordingly
+                        self.set_model(analysis_id, analysis_type)
+
                         # Get the user data corresponding to the user at the requested indices
                         status, response = self.mozaik_obelisk.get_data(user_id, data_index)
 
@@ -148,11 +173,13 @@ class TaskManager:
                         elif status == "Error":
                             self.error_in_task(analysis_id, response.status_code, response.text)
                         elif status == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {e}')   
+                            self.error_in_task(analysis_id, 500,f'RequestException: {response}')   
 
-                        input_array = [int.from_bytes(input_bytes[i:i+8], byteorder='little') for i in range(0, len(input_bytes), 8)]
-
-                        number_of_samples = len(input_array) % 187
+                        """
+                        NEED TO CHECK LENGTH IN BYTES AND PASS ON BYTES. 187*8+12+16
+                        """
+                        length_of_ciphertext = 187*8+12+16
+                        number_of_samples = len(input_bytes) % length_of_ciphertext
 
                         # Insert the status message into the database
                         self.db.set_status(analysis_id, 'Starting computation')
@@ -160,25 +187,19 @@ class TaskManager:
                         for i in range(number_of_samples):
                             try:
                                 # Define a sample = array of 187 elements
-                                sample = input_array[i*187:i*187+187]
+                                sample = input_bytes[i*length_of_ciphertext:i*length_of_ciphertext+length_of_ciphertext]
 
                                 # Run distributed decryption algorithm on the received encrypted sample
                                 decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
-                                # Convert boolean shares in a field to arithmetic in a ring mod 2^64
-                                self.run_conversion_B2A(analysis_id, decrypted_shares)
-
                                 # Write the shares to the Persistence file of MP-SPDZ for further processing
-                                self.write_shares(analysis_id, decrypted_shares)
+                                self.write_shares(analysis_id, decrypted_shares, append=True)
 
                                 # Run the inference on the single sample
                                 self.run_inference(analysis_id)
 
                                 # Read and decode boolean shares in field from the Persistence file
-                                shares_to_convert = self.read_shares(analysis_id)
-
-                                # Convert the output from inference to shares in a field
-                                shares_to_encrypt = self.run_conversion_A2B(analysis_id, shares_to_convert)
+                                shares_to_encrypt = self.read_shares(analysis_id)
 
                                 # Run distributed encryption on the final result
                                 encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
@@ -202,7 +223,7 @@ class TaskManager:
                             elif status == "Error":
                                 self.error_in_task(analysis_id, response.status_code, response.text)
                             elif status == "Exception":
-                                self.error_in_task(analysis_id, 500,f'RequestException: {e}')                                   
+                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                     
                         # Remove the request from the queue after processing
                         self.request_queue.task_done()

@@ -63,9 +63,12 @@ Load input (query samples) from client
 """
 input_data = sfix.Tensor([1, 187])
 
-i0_dim0 = sint.get_input_from(2)
-i0_dim1 = sint.get_input_from(2)
-input_data.input_from(2)
+# i0_dim0 = sint.get_input_from(2)
+# i0_dim1 = sint.get_input_from(2)
+# input_data.input_from(2)
+
+for element in input_data:
+    start = element.read_from_file(start)
 
 
 

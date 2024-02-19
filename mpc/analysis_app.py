@@ -39,7 +39,7 @@ class AnalysisApp:
                 except ValueError as e:
                     return jsonify(error=f"Invalid analysis_id/user_id. Please provide a valid UUIDv4. {e}"), 400
 
-                # task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
+                task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
                 response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
                       
