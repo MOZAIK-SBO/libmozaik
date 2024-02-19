@@ -1,0 +1,4 @@
+.idea/
+fhe/openfhe
+fhe/assets/dependencies/openfhe/
+fhe/cmake-build-*
