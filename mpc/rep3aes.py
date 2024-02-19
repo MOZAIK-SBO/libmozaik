@@ -9,15 +9,30 @@ class Rep3AesConfig:
         self.bin = path_to_bin
 
 def dist_enc(config, keys, user_id, computation_id, analysis_type, key_share, message_share):
+    """
+    Arguments
+     - config: Rep3AesConfig
+     - keys: MpcPartyKeys
+     - user_id: string
+     - computation_id: string
+     - analysis_type: string
+     - key_share: bytes-like of length 16
+     - message_share: list-like of 64-bit numbers in pairs (e.g. [[1,2], [3,4]])
+    
+    Returns ciphertext: bytes-like
+    """
     if len(key_share) != 16:
         raise ValueError("Expected key_share to be 16 bytes")
+    for (i,(v1,v2)) in enumerate(message_share):
+        if abs(v1) >= 2**64 or abs(v2) >= 2**64:
+            raise ValueError(f'Message share at index {i} is larger than 64-bits: {v}')
     (nonce, ad) = prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type)
     command = [config.bin, '--config', config.config, 'encrypt', '--mode', 'AES-GCM-128']
     input_args = json.dumps({
         'key_share': key_share.hex(),
         'nonce': nonce.hex(),
         'associated_data': ad.hex(),
-        'message_share': message_share.hex()
+        'message_share': message_share
     })
 
     # print(f'Running "{" ".join(command)}" with input {input_args}')
@@ -39,6 +54,15 @@ def dist_enc(config, keys, user_id, computation_id, analysis_type, key_share, me
         raise RuntimeError(f'Unexpected output: {output}')
 
 def dist_dec(config, user_id, key_share, ciphertext):
+    """
+    Arguments
+    - config: Rep3AesConfig
+    - user_id: string
+    - key_share: bytes-like of length 16
+    - ciphertext: bytes-like
+
+    Returns list of pairs of 64-bit numbers
+    """
     if len(key_share) != 16:
         raise ValueError("Expected key_share to be 16 bytes")
     if len(ciphertext) < 28:
@@ -62,7 +86,15 @@ def dist_dec(config, user_id, key_share, ciphertext):
     # try to parse the output of the program
     output = json.loads(result.stdout)
     if "message_share" in output and "error" not in output and "tag_error" not in output:
-        return bytes.fromhex(output["message_share"])
+        # message share should be a list of pairs of numbers
+        message_share = output["message_share"]
+        for m in message_share:
+            if len(m) != 2:
+                raise RuntimeError(f'Dist_dec output unexpected: {m}')
+            m1,m2 = m
+            if not isinstance(m1, int) or abs(m1) >= 2**64 or not isinstance(m2, int) or abs(m2) >= 2**64:
+                raise RuntimeError(f'Dist_dec output unexpected: {m1} {m2}')
+        return message_share
     elif "tag_error" in output and "error" not in output:
         raise RuntimeError("Dist_dec failed: Tag verification error")
     elif "error" in output:
