@@ -93,7 +93,7 @@ class TestDecryptKeyShare(unittest.TestCase):
 
 class TestRep3Aes(unittest.TestCase):
     @classmethod
-    def setUp(cls):
+    def setUpClass(cls):
         bin_path = Path('rep3aes/target/release/rep3-aes')
         # run cargo to compile Rep3Aes
         try:
@@ -109,6 +109,21 @@ class TestRep3Aes(unittest.TestCase):
             subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
 
         cls.rep3aes_bin = str(bin_path)
+
+        # run cargo to compile iot_integration
+        bin_path = Path('iot_integration/target/release/iot_integration')
+        try:
+            subprocess.run(['cargo', 'build', '--release'], cwd='./iot_integration/', check=True, stderr=subprocess.DEVNULL)
+        except FileNotFoundError:
+            # when rust is installed via rustup, it is often placed in the home directory which is not always
+            # part of PATH, so we need to add it before rebuilding
+            import sys
+            home = Path.home()
+            possible_paths = [home / ".cargo/bin"]
+            possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
+            os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
+            subprocess.run(['cargo', 'build', '--release'], cwd='./iot_integration/', check=True, stderr=subprocess.DEVNULL)
+        cls.iot_integration_bin = str(bin_path)
 
     @staticmethod
     def run_dist_enc(return_val, party, path_to_bin, key_share, message_share, user_id, analysis_type, computation_id):
@@ -201,6 +216,12 @@ class TestRep3Aes(unittest.TestCase):
         message_share = dist_dec(rep3aes_config, user_id, key_share, ct)
         return_val[party] =  message_share
 
+    def run_iot_protect(self, key, nonce, user_id, message):
+        result = subprocess.run([self.iot_integration_bin, '--key', str(key.hex()), '--nonce', str(nonce.hex()), '--user-id', user_id, '--message', str(message.hex())], check=True, capture_output=True)
+        ct_hex = result.stdout.decode("utf-8")
+        ct = bytes.fromhex(ct_hex)
+        return ct
+
     def test_dist_dec(self):
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         # create key shares
@@ -210,11 +231,7 @@ class TestRep3Aes(unittest.TestCase):
         ring_message = [secrets.randbelow(2**64) for _ in range(187)]
         message = TestRep3Aes.encode_ring_elements(ring_message)
         nonce = bytes.fromhex('157316abe528fe29d4716781')
-        ad = bytes(user_id, encoding='utf-8') + nonce
-        instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
-        instance.update(ad)
-        ct, tag = instance.encrypt_and_digest(message)
-        final_ct = nonce + ct + tag
+        final_ct = self.run_iot_protect(TestDecryptKeyShare.expected_key, nonce, user_id, message)
 
         return_dict = dict()
         t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, k1, final_ct, user_id])
