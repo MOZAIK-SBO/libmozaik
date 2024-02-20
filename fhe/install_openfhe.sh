@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # CHANGE ME
-export CC=/usr/bin/clang-17
-export CXX=/usr/bin/clang++-17
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
 
 # Create directories and pull openfhe
 rm -rf ./libs/*;

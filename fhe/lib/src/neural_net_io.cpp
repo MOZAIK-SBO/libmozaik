@@ -31,6 +31,7 @@ namespace ckks_nn {
         m_biases.reserve(n_layers);
         m_activations.reserve(n_layers);
         m_weight_dims.reserve(n_layers);
+        m_input_bounds_for_activation.reserve(n_layers);
 
         auto layers = config["layers"];
         assert(layers.size() == n_layers);
@@ -66,6 +67,13 @@ namespace ckks_nn {
             auto act = lookup_activation_string(activation_str);
             m_activations[layer_idx] = act;
 
+            auto current_layer_bound = current_layer_config["bounds"];
+            assert(current_layer_dim.size() == 2);
+
+            int_type lb = current_layer_bound[0];
+            int_type ub = current_layer_bound[1];
+            m_input_bounds_for_activation[layer_idx] = {lb, ub};
+
         }
 
     }
@@ -78,7 +86,8 @@ namespace ckks_nn {
 
         std::string line_buffer;
         int_type pos = 0;
-        while (std::getline(weight_file, line_buffer)) {
+        for(int_type row = 0; row < rows; row++) {
+            std::getline(weight_file, line_buffer);
             std::istringstream line_stream(line_buffer);
             // people claim that this works
             for(int_type col = 0; col < cols; col++) {

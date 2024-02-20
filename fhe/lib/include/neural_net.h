@@ -23,18 +23,29 @@ namespace ckks_nn {
 
         explicit NeuralNet(const std::string& config_dir_path = "assets/configs/default/", const std::string& config_name = "config.json");
 
-        double get_weight(int_type layer, int_type row, int_type col);
+        double get_weight(int_type layer, int_type row, int_type col) const;
 
-        std::vector<double> get_weight_row(int_type layer, int_type row);
+        std::vector<double> get_weight_row(int_type layer, int_type row) const;
 
-        std::vector<double> get_weight_col(int_type layer, int_type col);
+        std::vector<double> get_weight_col(int_type layer, int_type col) const;
 
-        double get_bias(int_type layer, int_type row);
+        double get_bias(int_type layer, int_type row) const;
 
-        Activation get_activation(int_type layer);
+        std::vector<double> get_bias_vector(int_type layer) const;
+
+        Activation get_activation(int_type layer) const;
+
+        int_type get_n_layers() const;
+
+        std::pair<int_type, int_type> get_bounds(int_type layer) const;
+
+        std::pair<int_type, int_type> get_weight_dim(int_type idx) const;
+
+        int_type estimate_multiplicative_depth(int_type func_degree);
 
     private:
 
+        std::vector<std::pair<int_type, int_type>> m_input_bounds_for_activation;
         std::vector<std::vector<double>> m_weights;
         std::vector<std::vector<double>> m_biases;
         std::vector<Activation> m_activations;
