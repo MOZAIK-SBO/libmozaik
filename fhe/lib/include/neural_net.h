@@ -43,7 +43,7 @@ namespace ckks_nn {
 
         int_type estimate_multiplicative_depth(int_type func_degree);
 
-    private:
+    //private:
 
         std::vector<std::pair<int_type, int_type>> m_input_bounds_for_activation;
         std::vector<std::vector<double>> m_weights;
