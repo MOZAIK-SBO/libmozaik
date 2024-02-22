@@ -27,11 +27,11 @@ namespace ckks_nn {
         json config = json::parse(config_stream);
 
         int_type n_layers = config["n_layers"];
-        m_weights.reserve(n_layers);
-        m_biases.reserve(n_layers);
-        m_activations.reserve(n_layers);
-        m_weight_dims.reserve(n_layers);
-        m_input_bounds_for_activation.reserve(n_layers);
+        m_weights.resize(n_layers);
+        m_biases.resize(n_layers);
+        m_activations.resize(n_layers);
+        m_weight_dims.resize(n_layers);
+        m_input_bounds_for_activation.resize(n_layers);
 
         auto layers = config["layers"];
         assert(layers.size() == n_layers);
@@ -52,8 +52,8 @@ namespace ckks_nn {
 
             m_weight_dims[layer_idx] = {rows, cols};
             // could overflow, but in that case we have other problems
-            m_weights[layer_idx].reserve(rows * cols);
-            m_biases[layer_idx].reserve(rows);
+            m_weights[layer_idx].resize(rows * cols);
+            m_biases[layer_idx].resize(cols);
 
             // paths to weight / bias matrices
             std::string layer_weight_path = config_dir_path + current_layer_config["weight_path"].get<std::string>();
@@ -102,14 +102,14 @@ namespace ckks_nn {
 
         std::string line_buffer;
         int_type pos = 0;
-        auto rows = m_weight_dims[layer].first;
+        auto cols = m_weight_dims[layer].second;
 
-        for(int_type row = 0; row < rows; row++) {
+        for(int_type col = 0; col < cols; col++) {
             std::getline(bias_stream, line_buffer);
             m_biases[layer][pos++] = std::stod(line_buffer);
         }
 
-        assert(pos == m_weight_dims[layer].first);
+        assert(pos == cols);
     }
 
     NeuralNet::Activation NeuralNet::lookup_activation_string(std::string &activation_string) {

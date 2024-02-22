@@ -62,10 +62,10 @@ namespace ckks_nn {
         auto COST_INNER_PROD = COST_MULT;
 
         int_type depth = 0;
-        for(int_type i = 0; i < m_weight_dims.size(); i++) {
+        for(int_type i = 0; i < static_cast<int_type>(m_weight_dims.size()); i++) {
             depth += COST_INNER_PROD;
             depth += COST_MERGE_SINGLE;
-            if (i == m_weight_dims.size() - 1) {
+            if (i == static_cast<int_type>(m_weight_dims.size()) - 1) {
                 depth += FUNC_COST;
                 depth += COST_INNER_PROD;
                 depth += FUNC_COST;

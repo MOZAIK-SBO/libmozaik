@@ -27,7 +27,15 @@ namespace ckks_nn {
         auto bias_encoded = m_cc->MakeCKKSPackedPlaintext(bias_vec);
         m_cc->EvalAddInPlace(tmp, bias_encoded);
 
-        return eval_activation(nn, layer_idx, vector);
+        auto relu_out =  eval_activation(nn, layer_idx, tmp);
+
+        auto keys = m_key;
+        Plaintext result;
+        m_cc->Decrypt(keys.secretKey, relu_out, &result);
+        result->SetLength(m_batch_size);
+        std::cout << "Intermediate result is " << result << std::endl;
+
+        return relu_out;
     }
 
     CKKSCiphertext NeuralNetEvaluator::eval_mat_mul(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
@@ -58,8 +66,15 @@ namespace ckks_nn {
 
         switch (activation) {
             case NeuralNet::Activation::RELU: {
-                auto func = [](double x) -> double { return x > 0 ? x : 0;};
-                return m_cc->EvalChebyshevFunction(func, vector, bounds.first, bounds.second, m_func_degree);
+                auto func = [](double x) -> double { return x > 0 ? x : -x;};
+                //return m_cc->EvalChebyshevFunction(func, vector, static_cast<double>(bounds.first), static_cast<double>(bounds.second), 2000);
+                auto tmp = m_cc->EvalChebyshevFunction(func, vector, -1, 1, 2000);
+                m_cc->EvalAddInPlace(tmp, vector);
+                std::vector<double> d2(m_batch_size);
+                std::fill(d2.begin(),d2.end(), 1.0/2);
+                auto pt = m_cc->MakeCKKSPackedPlaintext(d2);
+
+                return m_cc->EvalMult(tmp, pt);
             }
             case NeuralNet::Activation::SOFTMAX: {
 
