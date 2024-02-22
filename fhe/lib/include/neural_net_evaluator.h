@@ -27,13 +27,16 @@ namespace ckks_nn {
 
             m_batch_size = 256;
             std::vector<int32_t> automorphism_indices;
-            for(int32_t i = 1; i < m_batch_size; i *= 2 ) {
-                automorphism_indices.push_back(i);
+            for(int32_t i = 1; i < m_batch_size; i++) {
+                automorphism_indices.push_back(-i);
             }
 
-            m_cc_params.SetMultiplicativeDepth(16);
-            m_cc_params.SetScalingModSize(50);
+            m_cc_params.SetMultiplicativeDepth(40);
+            m_cc_params.SetScalingModSize(59);
             m_cc_params.SetBatchSize(256);
+            m_cc_params.SetSecurityLevel(HEStd_NotSet);
+            m_cc_params.SetRingDim(512);
+
             m_cc = GenCryptoContext(m_cc_params);
             m_cc->Enable(PKE);
             m_cc->Enable(LEVELEDSHE);

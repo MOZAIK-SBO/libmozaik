@@ -17,7 +17,7 @@ else()
     message(FATAL_ERROR "PACKAGE OpenFHE NOT FOUND")
 endif ()
 
-set( CMAKE_CXX_FLAGS ${OpenFHE_CXX_FLAGS} )
+#set( CMAKE_CXX_FLAGS ${OpenFHE_CXX_FLAGS} )
 
 include_directories( ${OPENMP_INCLUDES} )
 include_directories( ${OpenFHE_INCLUDE} )
@@ -30,7 +30,8 @@ include_directories( ${OpenFHE_INCLUDE}/binfhe )
 link_directories( ${OpenFHE_LIBDIR} )
 link_directories( ${OPENMP_LIBRARIES} )
 
-set( CMAKE_EXE_LINKER_FLAGS "${OpenFHE_EXE_LINKER_FLAGS} -static")
+message(STATUS "${OpenFHE_EXE_LINKER_FLAGS}")
+#set( CMAKE_EXE_LINKER_FLAGS "${OpenFHE_EXE_LINKER_FLAGS} -static")
 link_libraries( ${OpenFHE_STATIC_LIBRARIES} )
 
 add_executable(fhe main.cpp
