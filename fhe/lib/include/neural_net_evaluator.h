@@ -16,7 +16,7 @@ namespace ckks_nn {
 
     struct NeuralNetEvaluator {
 
-        CCParams<CryptoContextCKKSRNS> m_cc_params;
+
         CryptoContext<DCRTPoly> m_cc;
         KeyPair<DCRTPoly> m_key;
         int_type m_batch_size = 256;
@@ -25,19 +25,19 @@ namespace ckks_nn {
 
         explicit NeuralNetEvaluator() {
 
-            m_batch_size = 256;
             std::vector<int32_t> automorphism_indices;
             for(int32_t i = 1; i < m_batch_size; i++) {
                 automorphism_indices.push_back(-i);
             }
 
-            m_cc_params.SetMultiplicativeDepth(60);
-            m_cc_params.SetScalingModSize(59);
-            m_cc_params.SetBatchSize(256);
-            m_cc_params.SetSecurityLevel(HEStd_NotSet);
-            m_cc_params.SetRingDim(512);
+            CCParams<CryptoContextCKKSRNS> cc_params;
+            cc_params.SetMultiplicativeDepth(60);
+            cc_params.SetScalingModSize(59);
+            cc_params.SetBatchSize(256);
+            cc_params.SetSecurityLevel(HEStd_NotSet);
+            cc_params.SetRingDim(512);
 
-            m_cc = GenCryptoContext(m_cc_params);
+            m_cc = GenCryptoContext(cc_params);
             m_cc->Enable(PKE);
             m_cc->Enable(LEVELEDSHE);
             m_cc->Enable(ADVANCEDSHE);
