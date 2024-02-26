@@ -93,7 +93,7 @@ class TestTaskManager(unittest.TestCase):
     def test_process_requests(self):
         def expected_encrypted_shares(i):
             analysis_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
-            user_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
+            user_id = "e7514b7a-9293-4c83-b733-a53e0e449635"
             analysis_type = "Heartbeat-Demo-1"
             aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
             result_bytes = bytes.fromhex('6a000000000000004600000000000000280000000000000001000000000000002700000000000000')
@@ -114,7 +114,7 @@ class TestTaskManager(unittest.TestCase):
         
         def process_test(task_manager, key_share, config_index):
             analysis_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
-            user_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
+            user_id = "e7514b7a-9293-4c83-b733-a53e0e449635"
             analysis_type = "Heartbeat-Demo-1"
             data_index = [1, 2]  # Example data index
 
