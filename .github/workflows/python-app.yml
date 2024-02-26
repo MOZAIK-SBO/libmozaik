@@ -33,9 +33,10 @@ jobs:
     - name: Build MP-SPDZ
       run: |
         cd mpc/MP-SPDZ
-        sudo apt-get install automake build-essential clang cmake git libboost-dev libboost-thread-dev libboost-all-dev libgmp-dev libntl-dev libsodium-dev libssl-dev libtool python3
+        sudo apt-get install automake build-essential clang cmake git libboost-dev libboost-thread-dev libboost-filesystem-dev libboost-iostreams-dev libgmp-dev libntl-dev libsodium-dev libssl-dev libtool python3
         make malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
+        Scripts/setup-ssl.sh 3
     #- name: Lint with flake8
     #  run: |
     #    # stop the build if there are Python syntax errors or undefined names
