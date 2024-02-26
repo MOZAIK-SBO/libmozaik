@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Change directory to the mpc folder
 cd mpc
 
