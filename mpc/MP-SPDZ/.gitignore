@@ -98,8 +98,7 @@ local/
 *.log
 *.sql
 *.sqlite
-*.data
-Persistence/*
+
 
 # OS generated files #
 ######################
