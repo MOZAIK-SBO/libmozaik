@@ -248,7 +248,6 @@ name = "libmozaik_iot"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "hex",
 ]
 
 [[package]]
