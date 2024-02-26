@@ -38,4 +38,4 @@ jobs:
     #    flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test
       run: |
-        cd mpc && python3 test.py
+        cd mpc && python3 test.py test_manager.py test_analysis_app.py test_database.py test_mozaik_obelisk.py test_task_manager.py
