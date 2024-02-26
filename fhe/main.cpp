@@ -15,10 +15,13 @@ int main() {
     std::vector<double> test_vec(evaluator.m_batch_size);
     auto pt = cc->MakeCKKSPackedPlaintext(test_vec);
 
-
-
     auto ct = cc->Encrypt(keys.secretKey, pt);
-    auto res = evaluator.eval_network(test, ct);
+    auto res = evaluator.eval_activation(test, 4, ct);
+
+    Plaintext result;
+    cc->Decrypt(keys.secretKey, res, &result);
+    result->SetLength(8);
+    std::cout << "Intermediate result is " << result << std::endl;
 
     std::cout << "Hello, World!" << std::endl;
     return 0;

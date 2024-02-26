@@ -45,10 +45,22 @@ add_executable(fhe main.cpp
 target_include_directories(fhe PUBLIC lib/include)
 target_include_directories(fhe PUBLIC assets/dependencies/nlohmann-json)
 
-add_executable(fhe_server main_server.cpp)
+add_executable(fhe_server main_server.cpp
+        lib/src/neural_net_io.cpp
+        lib/include/neural_net.h
+        lib/src/neural_net_func.cpp
+        lib/include/neural_net_evaluator.h
+        lib/include/typedefs.h
+        lib/src/neural_net_evalulator.cpp)
 target_include_directories(fhe_server PUBLIC lib/include)
 target_include_directories(fhe_server PUBLIC assets/dependencies/nlohmann-json)
 
-add_executable(client_keygen client_setup.cpp)
+add_executable(client_keygen setup_client.cpp
+        lib/src/neural_net_io.cpp
+        lib/include/neural_net.h
+        lib/src/neural_net_func.cpp
+        lib/include/neural_net_evaluator.h
+        lib/include/typedefs.h
+        lib/src/neural_net_evalulator.cpp)
 target_include_directories(client_keygen PUBLIC lib/include)
 target_include_directories(client_keygen PUBLIC assets/dependencies/nlohmann-json)
