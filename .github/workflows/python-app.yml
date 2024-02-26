@@ -32,6 +32,7 @@ jobs:
         pip install -r mpc/requirements.txt
     - name: Build MP-SPDZ
       run: |
+        cd mpc/MP-SPDZ
         make malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
     #- name: Lint with flake8
