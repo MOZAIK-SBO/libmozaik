@@ -31,28 +31,14 @@ std::vector<double> read_data(fs::path& data_path, unsigned int length) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 5) {
-        std::cerr << "Usage: ./iot_protect [CRYPTO_CONTEXT] [PUBLIC_KEY] [DATA_FILE] [OUTPUT_FILE]" << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: ./iot_protect [PUBLIC_KEY] [DATA_FILE] [OUTPUT_FILE]" << std::endl;
         std::exit(0);
     }
 
-    CryptoContext<DCRTPoly> m_cc;
-    KeyPair<DCRTPoly> m_key;
-
-    m_cc->ClearEvalSumKeys();
-    m_cc->ClearEvalMultKeys();
-    m_cc->ClearEvalAutomorphismKeys();
-
-    auto cc_path = fs::path(argv[1]);
-    auto public_kay_path = fs::path(argv[2]);
-    auto data_path = fs::path(argv[3]);
-    auto res_path = fs::path(argv[4]);
-
-    // validate paths and deserialize
-    if (!fs::exists(cc_path)){
-        std::cerr << "Crypto context path does not exist. Exiting..." << std::endl;
-        std::exit(-1);
-    }
+    auto public_kay_path = fs::path(argv[1]);
+    auto data_path = fs::path(argv[2]);
+    auto res_path = fs::path(argv[3]);
 
     if (!fs::exists(public_kay_path)){
         std::cerr << "Public key path does not exist. Exiting..." << std::endl;
@@ -64,21 +50,21 @@ int main(int argc, char* argv[]) {
         std::exit(-1);
     }
 
-    if(!Serial::DeserializeFromFile(cc_path, m_cc, SerType::BINARY)) {
-        std::cerr << "Could not deserialize crypto context. Exiting..." << std::endl;
-        std::exit(-1);
-    }
 
-    if (!Serial::DeserializeFromFile(public_kay_path, m_key.publicKey, SerType::BINARY)) {
+
+    PublicKey<DCRTPoly> m_key;
+    if (!Serial::DeserializeFromFile(public_kay_path, m_key, SerType::BINARY)) {
         std::cerr << "Could not deserialize public key. Exiting..." << std::endl;
         std::exit(-1);
     }
 
-    auto data = read_data(data_path, m_cc->GetCyclotomicOrder() / 2);
+    auto cc = m_key->GetCryptoContext();
 
+    auto data = read_data(data_path, cc->GetRingDimension() / 2);
+    auto test = m_key->GetCryptoContext();
     // encrypt
-    auto encode_pt = m_cc->MakeCKKSPackedPlaintext(data);
-    auto ct = m_cc->Encrypt(m_key.publicKey, encode_pt);
+    auto encode_pt = cc->MakeCKKSPackedPlaintext(data);
+    auto ct = cc->Encrypt(m_key, encode_pt);
 
     if (!Serial::SerializeToFile(res_path, ct, SerType::BINARY)) {
         std::cerr << "Couldn't serialize output :((( " << std::endl;
