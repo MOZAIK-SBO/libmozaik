@@ -16,7 +16,6 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 namespace ckks_nn {
-
     // Begin cursed
     // Basically, computing softmax homomorphically is difficult if we want to actually have a distribution output
     // so we do a second order taylor expansion around 0 and hope it's good enough
@@ -95,12 +94,15 @@ namespace ckks_nn {
 
         switch (activation) {
             case NeuralNet::Activation::RELU: {
+
+                // we compute relu via RELU(x) = (x + |x|) / 2 since
+                // absolute value is easier to approximate via polynomials due to symmetry and asymptotics
+                // for x -> +- inf: lim |x| = lim x^n + p(x), n = 0 mod 2, deg p < n
                 auto func = [](double x) -> double { return x > 0 ? x : -x;};
-                //return m_cc->EvalChebyshevFunction(func, vector, static_cast<double>(bounds.first), static_cast<double>(bounds.second), 2000);
+
                 auto tmp = m_cc->EvalChebyshevFunction(func, vector, -3, 3, 2000);
                 m_cc->EvalAddInPlace(tmp, vector);
-                std::vector<double> d2(m_batch_size);
-                std::fill(d2.begin(),d2.end(), 1.0/2);
+                std::vector<double> d2(m_batch_size, 0.5);
                 auto pt = m_cc->MakeCKKSPackedPlaintext(d2);
 
                 return m_cc->EvalMult(tmp, pt);
@@ -163,6 +165,8 @@ namespace ckks_nn {
             std::exit(1);
         }
 
+        m_batch_size = m_cc->GetCyclotomicOrder() / 2;
+
         std::string auto_path = config[AUTO_STRING];
         std::ifstream auto_key_istream(auto_path, std::ios::in | std::ios::binary);
 
@@ -191,7 +195,7 @@ namespace ckks_nn {
         m_cc->DeserializeEvalMultKey(mult_key_istream, SerType::BINARY);
         m_cc->DeserializeEvalSumKey(auto_key_istream, SerType::BINARY);
 
-        // TODO maybe deserealize public key ? Not needed but who knows...
+        // TODO maybe deserialize public key ? Not needed but who knows...
     }
 
     CKKSCiphertext NeuralNetEvaluator::load_ciphertext_from_file(const std::string &ct_path) {
