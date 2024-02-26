@@ -261,6 +261,8 @@ class TaskManager:
                                 # Define a sample = array of 187 elements
                                 sample = input_bytes[i*length_of_ciphertext:i*length_of_ciphertext+length_of_ciphertext]
 
+                                print(f'user id: {user_id}')
+
                                 # Run distributed decryption algorithm on the received encrypted sample
                                 decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
@@ -280,6 +282,7 @@ class TaskManager:
                                 self.db.append_result(analysis_id, encrypted_shares.hex())
                             
                             except Exception as e:
+                                raise e
                                 self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
 
                             # Update status in the database
