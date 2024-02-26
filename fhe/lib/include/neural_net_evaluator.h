@@ -8,6 +8,7 @@
 #include "openfhe.h"
 #include "typedefs.h"
 #include "neural_net.h"
+#include <string>
 
 namespace ckks_nn {
 
@@ -19,9 +20,8 @@ namespace ckks_nn {
         CryptoContext<DCRTPoly> m_cc;
         KeyPair<DCRTPoly> m_key;
         int_type m_batch_size = 256;
-
-
         int_type m_func_degree = 16;
+        std::string m_config_dir = ".";
 
         explicit NeuralNetEvaluator() {
 
@@ -31,7 +31,7 @@ namespace ckks_nn {
                 automorphism_indices.push_back(-i);
             }
 
-            m_cc_params.SetMultiplicativeDepth(40);
+            m_cc_params.SetMultiplicativeDepth(60);
             m_cc_params.SetScalingModSize(59);
             m_cc_params.SetBatchSize(256);
             m_cc_params.SetSecurityLevel(HEStd_NotSet);
@@ -48,9 +48,9 @@ namespace ckks_nn {
             m_cc->EvalSumKeyGen(m_key.secretKey);
         }
 
-        CKKSCiphertext eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input);
+        explicit NeuralNetEvaluator(const std::string& config_dir, const std::string& config_name = "crypto_config.json");
 
-    private:
+        CKKSCiphertext eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input);
 
         CKKSCiphertext eval_layer(const NeuralNet& nn, int_type layer_idx, CKKSCiphertext& vector);
 
@@ -58,6 +58,14 @@ namespace ckks_nn {
 
         CKKSCiphertext
         eval_activation(const ckks_nn::NeuralNet &nn, int_type layer_idx, ckks_nn::CKKSCiphertext &vector);
+
+        static NeuralNet build_nn_from_crypto_config(const std::string& config_dir_path, const std::string& config_name = "crypto_config.json");
+
+        static CKKSCiphertext load_ciphertext_from_file(const std::string& ct_path);
+
+        static void write_results(CKKSCiphertext& ct, std::string& out_path);
+
+        ~NeuralNetEvaluator() = default;
 
     };
 
