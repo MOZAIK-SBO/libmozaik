@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!Serial::SerializeToFile(key_dir / SK_STRING, key.secretKey, SerType::BINARY)) {
-        std::cerr << "Error writing public key to " << (key_dir / PUB_STRING).string() << std::endl;
+        std::cerr << "Error writing public key to " << (key_dir / SK_STRING).string() << std::endl;
         std::exit(1);
     }
 
