@@ -41,6 +41,7 @@ namespace ckks_nn {
                 ret[i][j] = mat[new_i][j];
             }
         }
+        return ret;
     }
 
     // End cursed
@@ -165,7 +166,7 @@ namespace ckks_nn {
             std::exit(1);
         }
 
-        m_batch_size = m_cc->GetCyclotomicOrder() / 2;
+        m_batch_size = m_cc->GetRingDimension() / 2;
 
         std::string auto_path = config[AUTO_STRING];
         std::ifstream auto_key_istream(auto_path, std::ios::in | std::ios::binary);
