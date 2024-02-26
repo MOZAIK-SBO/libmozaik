@@ -67,6 +67,7 @@ def dist_dec(config, user_id, key_share, ciphertext):
         raise ValueError("Expected key_share to be 16 bytes")
     if len(ciphertext) < 28:
         raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
+    # print(key_share.hex(), ciphertext.hex())
     nonce = ciphertext[:12]
     ad = bytes(user_id, encoding='utf-8') + nonce
     command = [config.bin, '--config', config.config, 'decrypt', '--mode', 'AES-GCM-128']

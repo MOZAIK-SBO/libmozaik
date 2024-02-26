@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
+
 from mozaik_obelisk import MozaikObelisk 
 
 class MozaikObeliskTests(unittest.TestCase):

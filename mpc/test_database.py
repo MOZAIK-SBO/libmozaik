@@ -1,5 +1,6 @@
 import unittest
 import os
+
 from database import Database  
 
 class DatabaseTests(unittest.TestCase):

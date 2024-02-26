@@ -103,9 +103,11 @@ guesses = model.predict(input_data)
 
 sfix.write_to_file(guesses[0])
 
-@for_range(len(guesses))
-def _(i):
-    sfix.write_to_file(guesses[i])
+# print_ln('Prediction: %s', guesses[0].reveal())
+
+# @for_range(len(guesses))
+# def _(i):
+#     sfix.write_to_file(guesses[i])
 
 
 

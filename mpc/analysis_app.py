@@ -1,27 +1,53 @@
+import ssl
+import ulid
+
 from flask import Flask, render_template, jsonify, request, abort
 from flask_sslify import SSLify
-import ssl
-import uuid
+
 from config import Config
-from task_manager import TaskManager
 from database import Database
 from rep3aes import Rep3AesConfig
+from task_manager import TaskManager
 
 class AnalysisApp:
+    """
+    AnalysisApp class initializes and manages a Flask application for running analyses.
+
+    Attributes:
+        config (Config): The configuration object.
+        aes_config (Rep3AesConfig): The Rep3AesConfig object.
+        app (Flask): The Flask application instance.
+        db (Database): The database instance.
+    """
     def __init__(self, config_path):
+        """
+        Initialize the AnalysisApp with the provided configuration path.
+
+        Arguments:
+            config_path (str): The path to the configuration (Config) file.
+        """
         self.config = Config(config_path)
         self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes')
         self.app = Flask(__name__)
         self.db = Database('ecg_inference_database.db')
         self.initialize()
-
+ 
     def initialize(self):
+        """
+        Initialize the Flask app and set up routes.
+        """
         # Initialize the task manager
         task_manager = TaskManager(self.app, self.db, self.config, self.aes_config)
 
         # Set up routes for Flask app (you need to define your routes)
         @self.app.route('/analyse/', methods=['GET', 'POST'])
         def analyse():
+            """
+            Analyse route to handle analysis requests. Puts data into a TaskManager queue which automatically triggers processing.
+
+            Returns:
+                JSON: The response containing the analysis status.
+            """
             if request.method == 'POST':
                 # Get JSON data from the request
                 data = request.get_json()
@@ -34,10 +60,10 @@ class AnalysisApp:
 
                 # Validate analysis_id and user_id as a UUIDv4
                 try:
-                    request_uuid = uuid.UUID(analysis_id, version=4)
-                    # user_uuid = uuid.UUID(user_id, version=4)
+                    ulid.from_str(analysis_id)
+                    ulid.from_str(user_id)
                 except ValueError as e:
-                    return jsonify(error=f"Invalid analysis_id/user_id. Please provide a valid UUIDv4. {e}"), 400
+                    return jsonify(error=f"Invalid analysis_id/user_id. Please provide a valid ULID. {e}"), 400
 
                 task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
                 response = self.db.create_entry(analysis_id)
@@ -46,21 +72,20 @@ class AnalysisApp:
                 
             # return render_template('index.html')
 
-        @self.app.route('/status', methods=['GET'])
-        def get_analysis_status():
-            # Get JSON data from the request
-            data = request.get_json()
+        @self.app.route('/status/<analysis_id>', methods=['GET'])
+        def get_analysis_status(analysis_id):
+            """
+            Route to get analysis status.
 
-            # Extract analysis_id from data
-            analysis_id = data.get('analysis_id')
+            Arguments:
+                analysis_id (str): The analysis ID extracted from the URL path.
 
-            # Check if analysis_id is provided
-            if not analysis_id:
-                return jsonify(error="Missing analysis_id in JSON data."), 400
-            
+            Returns:
+                JSON: The analysis status.
+            """
             # Validate analysis_id as a UUIDv4
             try:
-                request_uuid = uuid.UUID(analysis_id, version=4)
+                ulid.from_str(analysis_id)
             except ValueError as e:
                     return jsonify(error=f"Invalid analysis_id. Please provide a valid UUIDv4. {e}"), 400
             

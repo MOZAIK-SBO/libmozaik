@@ -1,19 +1,45 @@
-import queue
-import threading
-import struct
 import os
 import subprocess
+import struct
+import queue
+import threading
+import time
+
 from mozaik_obelisk import MozaikObelisk
 from rep3aes import dist_dec, dist_enc
+from key_share import MpcPartyKeys
 
 class TaskManager:
+    """
+    TaskManager class manages tasks related to computations on the encrypted data received from Mozaik-Obelisk.
+
+    Attributes:
+        app (Flask): The Flask application instance.
+        db (Database): The database instance.
+        config (Config): The configuration object.
+        aes_config (Rep3AesConfig): The AES configuration object.
+        keys (MpcPartyKeys): Instance of MpcPartyKeys for managing pubic keys.
+        request_queue (queue.Queue): Queue for storing tasks.
+        request_thread (threading.Thread): Thread for processing requests.
+        mozaik_obelisk (MozaikObelisk): Instance of MozaikObelisk for interactions with the Mozaik Obelisk.
+        request_lock (threading.Lock): Lock for ensuring thread safety.
+        sharesfile (str): File path for storing shares for MP-SPDZ.
+    """
     def __init__(self, app, db, config, aes_config):
+        """
+        Initialize the TaskManager with the provided parameters.
+
+        Argumentss:
+            app (Flask): The Flask application instance.
+            db (Database): The database instance.
+            config (Config): The configuration object.
+            aes_config (Rep3AesConfig): The AES configuration object.
+        """
         self.app = app
         self.db = db
         self.config = config
         self.aes_config = aes_config
-        #Hardcode the pks of the parties
-        self.keys = ['tls_certs/server1.crt', 'tls_certs/server2.crt', 'tls_certs/server3.crt'] 
+        self.keys = MpcPartyKeys(self.config.keys_config())
 
         self.request_queue = queue.Queue()
 
@@ -24,12 +50,16 @@ class TaskManager:
         self.mozaik_obelisk = MozaikObelisk('http://127.0.0.1')
         self.request_lock = threading.Lock()
         self.sharesfile = f'MP-SPDZ/Persistence/Transactions-P{self.config.CONFIG_PARTY_INDEX}.data'
-        self.batch_size = 128
 
 
     def write_shares(self, analysis_id, data, append=False):
         """
         Takes as input a vector of rss shares in ring mod 2^64, encodes and writes the values to a file for MP-SPDZ readability.
+
+        Argumentss:
+            analysis_id (str): The analysis ID.
+            data (list): The shares to write.
+            append (bool, optional): Whether to append to an existing file. Defaults to False.
         """
         # Define the data to be written at the beginning
         header_data = bytearray([
@@ -51,17 +81,24 @@ class TaskManager:
                     file.write(header_data)
                 # Encode and write the input 64-bit integers in little endian format
                 for rss_share in data:
-                    for share in rss_share:
-                        packed_share = struct.pack('<q', share)
+                    for u64_share in rss_share:
+                        signed_share = (u64_share - 2**64) if (u64_share > 2**63) else u64_share
+                        packed_share = struct.pack('<q', signed_share)
                         file.write(packed_share)
+                file.flush()
         else:
-            self.error_in_task(analysis_id, 500, 'MP-SPDZ Input file not found')
-            # Remove the request from the queue after processing
-            # request_queue.task_done()
+            self.error_in_task(analysis_id, 500, 'MP-SPDZ Input-shares file not found')
 
-    def read_shares(self, analysis_id):
+    def read_shares(self, analysis_id, number_of_shares=5):
         """
-        Read shares from the MP-SPDZ persistence file, decode them according to ring mod 2^64 and return them as a single string
+        Read {number of RSSshares} as shares from the MP-SPDZ persistence file, decode them according to ring mod 2^64 and return them as a list
+
+        Argumentss:
+            analysis_id (str): The analysis ID.
+            number_of_values (int, optional): Number of RSS shares to read. Defaults to 5.
+
+        Returns:
+            list: List of u64 RSS shares in form (x_i, x_{i+1}).
         """
         # Move the result to the targetfile
         if os.path.exists(self.sharesfile):
@@ -72,24 +109,21 @@ class TaskManager:
                     file_size = os.path.getsize(self.sharesfile)
 
                     # Calculate the start position for reading the last 80 bytes
-                    start_position = min(38, file_size)
+                    start_position = max(0, file_size - 8*number_of_shares*2)
 
                     # Move the file pointer to the start position
                     binary_file.seek(start_position)
 
                     # Read the last 80 bytes
-                    content = binary_file.read()
+                    last_n_bytes = binary_file.read()
 
                     # Convert the last 80 bytes to a list of integers in little-endian format
                     output_shares = []
-                    for i in range(0, len(content), 16):  # Group every 16 bytes together
-                        values = struct.unpack('<qq', content[i:i+16])  # Unpack 16 bytes into 2 `q` (8-byte signed integers)
-                        output_shares.append(list(values))  # Append the values as a list to output_shares
-
+                    for i in range(0, len(last_n_bytes), 16):  # Group every 16 bytes together
+                        values = struct.unpack('<qq', last_n_bytes[i:i+16])  # Unpack 16 bytes into 2 `q` (8-byte signed integers)
+                        u64_values = [v + (1 << 64) if v < 0 else v for v in values]
+                        output_shares.append(list(u64_values[::-1]))  # Append the u64 values as a list of RSS shares in form (x_i, x_{i+1})to output_shares
                     return output_shares
-
-                    # Insert the result into the database
-                    # self.db.append_result(analysis_id, result_str)
 
             except Exception as e:
                 self.error_in_task(analysis_id, 500, f"Unable to interpret the result: {e}")
@@ -98,11 +132,18 @@ class TaskManager:
 
     
     def run_inference(self, analysis_id, program = 'heartbeat_inference_demo'):
+        """
+        Run the ML inference in MP-SPDZ.
+
+        Arguments:
+            analysis_id (str): The analysis ID.
+            program (str, optional): The program to run. Defaults to 'heartbeat_inference_demo'.
+        """
         try:
-            print("Starting computation")
-            result = subprocess.run(['MP-SPDZ/Scripts/../malicious-rep-ring-party.x', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
-                                    capture_output=True, text=True, check=False)
-            print("Finished computation")
+            # print("Starting computation")
+            result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
+                                    capture_output=True, text=True, check=False, cwd='MP-SPDZ')
+            # print("Finished computation")
             
             print("Captured Output:", result.stdout)
             print("Captured Error Output:", result.stderr)
@@ -114,6 +155,12 @@ class TaskManager:
     def read_model_from_file(self, file_path):
         """
         Reads data from a file where each line contains pairs of integers separated by commas.
+
+        Args:
+            file_path (str): The file path to read from.
+
+        Returns:
+            list: List of RSS shares.
         """
         data = []
         with open(file_path, 'r') as file:
@@ -123,36 +170,60 @@ class TaskManager:
                 data.append(pairs)
         return data
 
-    def set_model(self, analysis_id, analysis_type):
+    def set_model(self, analysis_id, analysis_type, input):
+        """
+        Reads shares of weights and biases, concatanates them together with input vector and writes into MP-SPDZ shares file
+
+        Arguments:
+            analysis_id (str): The analysis ID.
+            analysis_type (str): The analysis type.
+            input (list): The input data as RSS shares in the form (x_i, x_{i+1}).
+        """
         if analysis_type == "Heartbeat-Demo-1":
-            model=[]
-            weights = self.read_model_from_file(f'heartbeat-inference-model/model_shares{self.config.CONFIG_PARTY_INDEX}.txt')
-            biases = self.read_model_from_file(f'heartbeat-inference-model/biases_shares{self.config.CONFIG_PARTY_INDEX}.txt')
-            for weight_pair in weights[0]:
-                model.append(weight_pair)
-            for biases_pair in biases[0]:
-                model.append(biases_pair)
-            self.write_shares(analysis_id, model)
+            try:
+                model=[]
+                weights = self.read_model_from_file(f'heartbeat-inference-model/model_shares{self.config.CONFIG_PARTY_INDEX+1}.txt')
+                biases = self.read_model_from_file(f'heartbeat-inference-model/biases_shares{self.config.CONFIG_PARTY_INDEX+1}.txt')
+                for weight_pair in weights[0]:
+                    model.append(weight_pair)
+                for biases_pair in biases[0]:
+                    model.append(biases_pair)
+                for input_pair in input:
+                    model.append(input_pair[::-1])
+                self.write_shares(analysis_id, model)
+            except Exception as e:
+                self.error_in_task(analysis_id, 400, f'An error occured while setting weights: {e}')
         else:
             self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
 
 
     def error_in_task(self, analysis_id, code, message):
+        """
+        Handle errors in a task.
+
+        Arguments:
+            analysis_id (str): The analysis ID.
+            code (int): The HTTP error code.
+            message (str): The error message.
+        """
         self.db.set_status(analysis_id, f'ERROR:{code}:{message}')
         with self.app.app_context():
             self.app.logger.error(f"Task: {analysis_id} Code {code}\n{message}")
 
 
-    def process_requests(self):
+    def process_requests(self, test=False):
+        """
+        Process requests in the queue. Run the computation on encrypted data. This entails: get data from Mozaik-Obelisk, run sequentially on each sample distributed decryption, inference, distributed encryption. The result is sent for storage to Mozaik-Obelisk.
+        
+        Args:
+            test (bool, optional): Whether to run in test mode. Defaults to False.
+        """
         while True:
             try:
                 analysis_id, user_id, analysis_type, data_index = self.request_queue.get()
                 if analysis_type == "Heartbeat-Demo-1":
                     # Lock to ensure thread safety
                     with self.request_lock:
-                        # Set the model accordingly
-                        self.set_model(analysis_id, analysis_type)
-
                         # Get the user data corresponding to the user at the requested indices
                         status, response = self.mozaik_obelisk.get_data(user_id, data_index)
 
@@ -175,11 +246,12 @@ class TaskManager:
                         elif status == "Exception":
                             self.error_in_task(analysis_id, 500,f'RequestException: {response}')   
 
-                        """
-                        NEED TO CHECK LENGTH IN BYTES AND PASS ON BYTES. 187*8+12+16
-                        """
+                        # check the length of received ciphertext and thus set the number of samples accordingly
                         length_of_ciphertext = 187*8+12+16
-                        number_of_samples = len(input_bytes) % length_of_ciphertext
+                        if len(input_bytes) % length_of_ciphertext != 0:
+                            self.error_in_task(analysis_id, 500,f'Invalid length of ciphertext. Received: {len(input_bytes)}, expected multiple of: {length_of_ciphertext}')
+                        else:
+                            number_of_samples = int(len(input_bytes) / length_of_ciphertext)
 
                         # Insert the status message into the database
                         self.db.set_status(analysis_id, 'Starting computation')
@@ -192,8 +264,8 @@ class TaskManager:
                                 # Run distributed decryption algorithm on the received encrypted sample
                                 decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
-                                # Write the shares to the Persistence file of MP-SPDZ for further processing
-                                self.write_shares(analysis_id, decrypted_shares, append=True)
+                                # Set the model and input accordingly
+                                self.set_model(analysis_id, analysis_type, decrypted_shares)
 
                                 # Run the inference on the single sample
                                 self.run_inference(analysis_id)
@@ -205,7 +277,7 @@ class TaskManager:
                                 encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
 
                                 # Append the encrypted result to the database
-                                self.db.append_result(analysis_id, encrypted_shares)
+                                self.db.append_result(analysis_id, encrypted_shares.hex())
                             
                             except Exception as e:
                                 self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
@@ -226,12 +298,11 @@ class TaskManager:
                                 self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                     
                         # Remove the request from the queue after processing
+                        if test:
+                            break
                         self.request_queue.task_done()
                 else:
                     self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
             except Exception as e:
-                if analysis_id != None:
-                    self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
-                else:
                     raise e
     

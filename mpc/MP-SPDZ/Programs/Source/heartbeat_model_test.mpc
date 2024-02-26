@@ -47,6 +47,7 @@ print_ln('%s', start)
 # w0_dim0 = sint.get_input_from(0)
 # w0_dim1 = sint.get_input_from(0)
 # weights0.input_from(0)
+# print_ln("weights0: %s", weights0[0].reveal())
 
 # w1_dim0 = sint.get_input_from(0)
 # w1_dim1 = sint.get_input_from(0)
@@ -74,16 +75,23 @@ biases2 = sfix.Tensor([1, 50])
 biases3 = sfix.Tensor([1, 50])
 biases4 = sfix.Tensor([1, 5])
 
+print_ln('%s', start)
 for element in biases0:
     start = element.read_from_file(start)
+print_ln('%s', start)
 for element in biases1:
     start = element.read_from_file(start)
+print_ln('%s', start)
 for element in biases2:
     start = element.read_from_file(start)
+print_ln('%s', start)
 for element in biases3:
     start = element.read_from_file(start)
+print_ln('%s', start)
 for element in biases4:
     start = element.read_from_file(start)
+    
+print_ln('start at the end of biases %s', start)
 
 # b0_dim0 = sint.get_input_from(1)
 # b0_dim1 = sint.get_input_from(1)
@@ -115,10 +123,20 @@ for element in biases4:
 Load input (query samples) from client
 """
 input_data = sfix.Tensor([1, 187])
+input_data_test = sfix.Tensor([1, 187])
 
 i0_dim0 = sint.get_input_from(2)
 i0_dim1 = sint.get_input_from(2)
 input_data.input_from(2)
+
+print_ln("input: %s", input_data.reveal())
+
+print_ln('start test: %s', start)
+for element in input_data_test:
+    start = element.read_from_file(start)
+print_ln('end element: %s', start)
+
+print_ln("input_test: %s", input_data_test.reveal())
 
 
 from Compiler import ml
@@ -134,7 +152,7 @@ layers = [
 
 model = tf.keras.models.Sequential(layers)
 
-model.build(input_data.sizes, 1)
+model.build(input_data_test.sizes, 1)
 
 #Update the weights and biases of each layer
 model.opt.layers[0].W = weights0
@@ -148,7 +166,9 @@ model.opt.layers[2].b = biases2
 model.opt.layers[3].b = biases3
 model.opt.layers[4].b = biases4
 
-guesses = model.predict(input_data)
+guesses = model.predict(input_data_test)
+
+sfix.write_to_file(guesses[0])
 
 print_ln('Prediction: %s', guesses[0].reveal())
 

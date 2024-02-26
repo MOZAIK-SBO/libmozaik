@@ -1,6 +1,5 @@
 import os
 import struct
-import numpy as np
 
 def read_model_from_file(file_path):
         data = []
