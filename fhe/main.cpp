@@ -29,11 +29,11 @@ int main() {
     auto pt = cc->MakeCKKSPackedPlaintext(test_vec);
 
     auto ct = cc->Encrypt(keys.secretKey, pt);
-    auto res = evaluator.eval_activation(test, 4, ct);
+    auto res = evaluator.eval_network(test, ct);
 
     Plaintext result;
     cc->Decrypt(keys.secretKey, res, &result);
-    result->SetLength(8);
+    result->SetLength(5);
     std::cout << "Intermediate result is " << result << std::endl;
 
     Plaintext result;
