@@ -1,36 +1,40 @@
 import requests
+import urllib.parse
 
 class MozaikObelisk:
     """
     MozaikObelisk class interacts with the Mozaik Obelisk.
 
     Attributes:
-        base_url : The base URL of the Mozaik Obelisk node.
+        base_url : The IP address of the Mozaik Obelisk node.
     """
     def __init__(self, base_url):
         """
         Initialize MozaikObelisk with the provided base URL.
 
         Args:
-            base_url (str) : The base URL of the Mozaik Obelisk service.
+            base_url (str) : The base URL of the Mozaik Obelisk.
         """
         self.base_url = base_url
 
     def get_data(self, user_id, data_index):
         """
-        Get data for inference from the Mozaik Obelisk.
+        Get data for inference from the Mozaik Obelisk. The GET identifier data are sent as query parameters in the URL.
 
         Arguments:
             user_id (str) : The ID of the user.
-            data_index (list) : A list of 2 elements, stating and end index of the data requested.
+            data_index (list) : A list of 2 elements, starting and end index of the data requested.
 
         Returns:
             A tuple containing the status and the user data.
         """
         endpoint = '/getData'
 
+        # Encode the data_index list as a UTF-8 string
+        data_index_encoded = urllib.parse.urlencode({'data_index': data_index}, doseq=True)
+
         # Construct the full URL with parameters
-        url = f'{self.base_url}{endpoint}?user_id={user_id}&data_index={data_index}'
+        url = f'{self.base_url}{endpoint}?user_id={user_id}&data_index={data_index_encoded}'
 
         try:
             # Make the GET request
@@ -49,7 +53,7 @@ class MozaikObelisk:
 
     def get_key_share(self, analysis_id):
         """
-        Get key share from the Mozaik Obelisk.
+        Get key share from the Mozaik Obelisk. 
 
         Argumentss:
             analysis_id (str) : The ID of the analysis.
@@ -57,10 +61,10 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the key share.
         """
-        endpoint = '/getKeyShare'
+        endpoint = f'/getKeyShare/{analysis_id}'
 
         # Construct the full URL with parameters
-        url = f'{self.base_url}{endpoint}?user_id={analysis_id}'
+        url = f'{self.base_url}{endpoint}'
 
         try:
             # Make the GET request
@@ -84,7 +88,7 @@ class MozaikObelisk:
         Arguments:
             analysis_id (str) : The ID of the analysis.
             user_id (str) : The ID of the user.
-            result (any) : The result to store.
+            result (str) : The result to store.
 
         Returns:
             A tuple containing the status and the response.
