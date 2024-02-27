@@ -70,13 +70,12 @@ namespace ckks_nn {
     CKKSCiphertext NeuralNetEvaluator::eval_mat_mul(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                           ckks_nn::CKKSCiphertext &vector) {
         auto dim = nn.get_weight_dim(layer_idx);
-        auto rows = dim.first;
+        auto cols = dim.second;
 
-        std::vector<double> row(m_batch_size);
+        //std::vector<double> row(m_batch_size);
         std::vector<CKKSCiphertext> temp_results;
-        for(int_type i = 0; i < rows; i++) {
+        for(int_type i = 0; i < cols; i++) {
             auto row_i = nn.get_weight_col(layer_idx, i);
-            row_i.resize(m_batch_size);
             auto row_ptx = m_cc->MakeCKKSPackedPlaintext(row_i);
 
             auto inner_prod = m_cc->EvalInnerProduct(vector, row_ptx, m_batch_size);
@@ -91,6 +90,8 @@ namespace ckks_nn {
                                         ckks_nn::CKKSCiphertext &vector) {
         auto activation = nn.get_activation(layer_idx);
         auto bounds = nn.get_bounds(layer_idx);
+        auto lb = static_cast<double>(bounds.first);
+        auto ub = static_cast<double>(bounds.second);
         auto dims = nn.get_weight_dim(layer_idx);
 
         switch (activation) {
@@ -101,36 +102,77 @@ namespace ckks_nn {
                 // for x -> +- inf: lim |x| = lim x^n + p(x), n = 0 mod 2, deg p < n
                 auto func = [](double x) -> double { return x > 0 ? x : -x;};
 
-                auto tmp = m_cc->EvalChebyshevFunction(func, vector, -3, 3, 2000);
+
+                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 256);
                 m_cc->EvalAddInPlace(tmp, vector);
                 std::vector<double> d2(m_batch_size, 0.5);
                 auto pt = m_cc->MakeCKKSPackedPlaintext(d2);
 
                 return m_cc->EvalMult(tmp, pt);
             }
-            case NeuralNet::Activation::SOFTMAX: {
+            case NeuralNet::Activation::SOFTMAX_LINEAR: {
 
 
                 // TODO: implement linearization of softmax around [0,0...,0]
+                std::vector<double> F_0(5, 0.2);
+                auto encoded_F_0 = m_cc->MakeCKKSPackedPlaintext(F_0);
 
+                // start with 1st order approx
+                auto grad_mat = setup_matrix_for_mult(grad_softmax_at_0);
+                auto scal = m_cc->MakeCKKSPackedPlaintext(grad_mat[0]);
+                auto grad_part = m_cc->EvalMult(vector, scal);
 
+                for(int i = 1; i < 5; i++) {
+                    auto tmp = m_cc->MakeCKKSPackedPlaintext(grad_mat[i]);
+                    auto prod_i = m_cc->EvalMult(vector, tmp);
+                    m_cc->EvalAddInPlace(grad_part, prod_i);
+                }
 
-                std::vector<double> exp_taylor = {1, 1, 0.5};
-                // unclean solution for now
-                // m_cc->EvalSubInPlace(vector, (double) bounds.second);
-                double new_lowerbound = bounds.first - bounds.second + 1;
-                auto func = [](double x) -> double { return std::exp(x); };
+                // now second order
+                std::vector<CKKSCiphertext> hessian_rhs;
+                for(int i = 0; i < 5; i++) {
+                    auto hessian_mat = setup_matrix_for_mult(hessian_softmax_at_0[i]);
+                    auto scal_hessian = m_cc->MakeCKKSPackedPlaintext(hessian_mat[0]);
+                    auto hessian_part = m_cc->EvalMult(vector, scal_hessian);
 
-                // v_i' = exp(v_i)
-                auto enc_exp = m_cc->EvalPoly(vector, exp_taylor);
+                    for(int j = 1; j < 5; j++) {
+                        auto tmp = m_cc->MakeCKKSPackedPlaintext(hessian_mat[i]);
+                        auto prod_i = m_cc->EvalMult(vector, tmp);
+                        m_cc->EvalAddInPlace(hessian_part, prod_i);
+                    }
+                    auto dotP = m_cc->EvalInnerProduct(hessian_part, vector, 5);
+                    hessian_rhs.push_back(dotP);
+                }
+                auto merged = m_cc->EvalMerge(hessian_rhs);
+                m_cc->EvalAddInPlace(merged, grad_part);
 
-                // w_j = \sum v_i' = \sum exp(v_i)
-                auto extracted = m_cc->EvalSum(enc_exp, dims.second);
-                // x_i = 1 / w_i
-                auto extract_inv = m_cc->EvalDivide(extracted, 1, 10, 256);
-                // out_i = v_i' / w_i = exp(v_i) / \sum exp(v_i)
-                return extract_inv; // m_cc->EvalMult(extract_inv, enc_exp);
+                return m_cc->EvalAdd(merged, encoded_F_0);
             }
+            case NeuralNet::Activation::SOFTMAX: {
+                // NOTE We compute log-softmax for better stability
+                double shift = (lb + ub) / 2;
+                // input is between -shift, shift now
+                m_cc->EvalSubInPlace(vector, shift);
+                lb += shift;
+                std::vector<double> normalization(5, 1.0 / std::abs(lb));
+                auto encoded_normalization = m_cc->MakeCKKSPackedPlaintext(normalization);
+                // input is between -1, 1 now
+                auto normalized = m_cc->EvalMult(vector, encoded_normalization);
+                // shift by 2 to prevent approximation error (nan) around 0
+                m_cc->EvalAddInPlace(normalized, 2);
+
+
+                std::vector<double> exp_F = {1, 1, 0.5, 1.0/6};
+                auto exp_norm = m_cc->EvalPolyLinear(normalized,exp_F);
+
+                auto sum_exp_norm = m_cc->EvalSum(exp_norm, 5);
+
+                auto log_F = [](double x) {return std::log(x); };
+                auto sum_exp_norm_log = m_cc->EvalChebyshevFunction(log_F, sum_exp_norm, 5 * std::exp(1), 5 * std::exp(3), 2000);
+
+                return m_cc->EvalSub(normalized, sum_exp_norm_log);
+            }
+
             default: break;
         }
         return vector;

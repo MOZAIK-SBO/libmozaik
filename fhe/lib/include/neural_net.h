@@ -18,7 +18,8 @@ namespace ckks_nn {
 
         enum struct Activation {
             RELU,
-            SOFTMAX
+            SOFTMAX,
+            SOFTMAX_LINEAR
         };
 
         explicit NeuralNet(const std::string& config_dir_path = "assets/configs/default/", const std::string& config_name = "config.json");
