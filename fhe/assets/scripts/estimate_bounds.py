@@ -104,7 +104,7 @@ def fuzz_network(weight_mats, bias_vectors, n=1000):
                 vec = np.maximum(linear_part, 0)
             else:
                 # linear_part -= 7 - 1
-                exp_part = 1 + linear_part + linear_part * linear_part / 2
+                exp_part = np.exp(linear_part / 6)
                 current_min.append(np.min(exp_part))
                 current_max.append(np.max(exp_part))
 
