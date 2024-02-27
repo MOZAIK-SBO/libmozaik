@@ -74,7 +74,7 @@ class TaskManager:
         mode = 'ab' if append else 'wb'
 
         # Open the binary file in write mode
-        if os.path.exists(self.sharesfile):
+        try:
             with open(self.sharesfile, mode) as file:
                 # Write the header data at the beginning of the file
                 if not append:
@@ -86,8 +86,8 @@ class TaskManager:
                         packed_share = struct.pack('<q', signed_share)
                         file.write(packed_share)
                 file.flush()
-        else:
-            self.error_in_task(analysis_id, 500, 'MP-SPDZ Input-shares file not found')
+        except Exception as e:
+            self.error_in_task(analysis_id, 500, f'Error writing into a file: {e}')
 
     def read_shares(self, analysis_id, number_of_shares=5):
         """
