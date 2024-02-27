@@ -6,36 +6,35 @@
       "dims" : [ 187, 50],
       "weight_path": "weights_0_relu.txt",
       "bias_path": "biases_0_relu.txt",
-      "bounds": [-10, 10],
+      "bounds": [-2, 2],
       "activation": "relu"
     },
     {
       "dims" : [50, 50],
       "weight_path": "weights_1_relu.txt",
       "bias_path": "biases_1_relu.txt",
-      "bounds": [-44, 46],
-      "activation": "relu",
-      "bound": []
+      "bounds": [-2, 4],
+      "activation": "relu"
     },
     {
       "dims" : [50, 50],
       "weight_path": "weights_2_relu.txt",
       "bias_path": "biases_2_relu.txt",
-      "bounds": [-136, 158],
+      "bounds": [-2, 3],
       "activation": "relu"
     },
     {
       "dims" : [50, 50],
       "weight_path": "weights_3_relu.txt",
       "bias_path": "biases_3_relu.txt",
-      "bounds": [-462, 552],
+      "bounds": [-2, 4],
       "activation": "relu"
     },
     {
       "dims" : [50, 5],
       "weight_path": "weights_4_relu.txt",
       "bias_path": "biases_4_relu.txt",
-      "bounds": [-2841, 2775],
+      "bounds": [-6, 6],
       "activation": "softmax"
     }
   ]

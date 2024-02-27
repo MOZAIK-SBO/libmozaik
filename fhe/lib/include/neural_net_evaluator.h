@@ -31,7 +31,7 @@ namespace ckks_nn {
             }
 
             CCParams<CryptoContextCKKSRNS> cc_params;
-            cc_params.SetMultiplicativeDepth(60);
+            cc_params.SetMultiplicativeDepth(100);
             cc_params.SetScalingModSize(59);
             cc_params.SetBatchSize(256);
             cc_params.SetSecurityLevel(HEStd_NotSet);
