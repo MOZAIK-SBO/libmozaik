@@ -56,14 +56,15 @@ class AnalysisApp:
                 analysis_id = data.get('analysis_id')
                 user_id = data.get('user_id')
                 data_index = data.get('data_index', [])
+                user_key = data.get('user_key')
                 analysis_type = data.get('analysis_type')
 
-                # Validate analysis_id and user_id as a UUIDv4
+                # Validate analysis_id as a UUIDv4
                 try:
                     ulid.from_str(analysis_id)
-                    ulid.from_str(user_id)
+                    # ulid.from_str(user_id)
                 except ValueError as e:
-                    return jsonify(error=f"Invalid analysis_id/user_id. Please provide a valid ULID. {e}"), 400
+                    return jsonify(error=f"Invalid analysis_id. Please provide a valid ULID. {e}"), 400
 
                 task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
                 response = self.db.create_entry(analysis_id)

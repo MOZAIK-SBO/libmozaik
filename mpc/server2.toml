@@ -1,6 +1,8 @@
 results_dir = "results"
 port = 443
-ca_cert = "tls_certs/ca.crt"
+ca_cert = "tls_certs/mozaik_obelisk/mozaik-ca.crt"
 server_cert = "tls_certs/server3.crt"
 server_key = "tls_certs/server3.key"
 party_index = 2
+server_id = "mpc3"
+server_secret = "uJ8WRroZXUqefA"

@@ -12,6 +12,8 @@ class Config:
         CONFIG_SERVER_CERT: The path to the server certificate file.
         CONFIG_SERVER_KEY: The path to the server key file.
         CONFIG_PARTY_INDEX: The index of the party.
+        CONFIG_SERVER_ID: Server id for auth to obelisk
+        CONFIG_SERVER_SECRET: Server secret for auth to obelisk
     """
     def __init__(self, config_path):
         """
@@ -28,6 +30,8 @@ class Config:
         self.CONFIG_SERVER_CERT = self.config['server_cert']
         self.CONFIG_SERVER_KEY = self.config['server_key']
         self.CONFIG_PARTY_INDEX = self.config['party_index']
+        self.CONFIG_SERVER_ID = self.config['server_id']    
+        self.CONFIG_SERVER_SECRET = self.config['server_secret']  
 
 
     def load_config(self, config_path):
