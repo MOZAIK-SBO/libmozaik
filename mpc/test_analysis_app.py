@@ -5,13 +5,14 @@ from analysis_app import AnalysisApp
 
 class AnalysisAppTests(unittest.TestCase):
     def setUp(self):
-        with patch('analysis_app.TaskManager') as MockTaskManager:
-            # Mocking the process_requests method of TaskManager with a no-op function
-            MockTaskManager.return_value.process_requests = None
-            # Create the AnalysisApp instance
-            self.app = AnalysisApp('server0.toml')
-            self.client = self.app.app.test_client()
-            self.app.start_background_thread()
+        with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
+            with patch('analysis_app.TaskManager') as MockTaskManager:
+                # Mocking the process_requests method of TaskManager with a no-op function
+                MockTaskManager.return_value.process_requests = None
+                # Create the AnalysisApp instance
+                self.app = AnalysisApp('server0.toml')
+                self.client = self.app.app.test_client()
+                self.app.start_background_thread()
 
     def tearDown(self):
         self.app.db.delete_database()
@@ -32,7 +33,7 @@ class AnalysisAppTests(unittest.TestCase):
             data={'analysis_id': 'invalid_id', 'user_id': '01HQJRH8N3ZEXH3HX7QD56FH0W', 'data_index': [1, 2], 'analysis_type': 'Heartbeat-Demo-1'}
             response = self.client.post('/analyse/', json=data, headers=headers)
             self.assertEqual(response.status_code, 400)
-            self.assertTrue(b"Invalid analysis_id/user_id" in response.data)
+            self.assertTrue(b"Invalid analysis_id" in response.data)
 
     def test_get_analysis_status_route(self):
         self.app.db.create_entry('01HQJRFE0352Y5Y98VFTHEBS0X')

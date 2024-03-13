@@ -1,5 +1,5 @@
 import requests
-import urllib.parse
+import base64
 
 class MozaikObelisk:
     """
@@ -8,18 +8,58 @@ class MozaikObelisk:
     Attributes:
         base_url : The IP address of the Mozaik Obelisk node.
     """
-    def __init__(self, base_url):
+    def __init__(self, base_url, server_id, server_secret):
         """
         Initialize MozaikObelisk with the provided base URL.
 
         Args:
             base_url (str) : The base URL of the Mozaik Obelisk.
+            auth_token (str) : The JWT token to authorise to Obelisk
         """
         self.base_url = base_url
+        self.auth_token = self.request_jwt_token(server_id, server_secret)
 
-    def get_data(self, user_id, data_index):
+    def request_jwt_token(self, server_id, server_secret):
         """
-        Get data for inference from the Mozaik Obelisk. The GET identifier data are sent as query parameters in the URL.
+        Function for requesting JWT token for authorization in future HTTP calls to Obelisk
+
+        Arguments:
+            server_id (str) : The id of the server 
+            server_secret (str) : The secret used to generate JWT
+        """
+        # Encode the server ID and server secret for the Authorization header
+        auth_header = base64.b64encode(f"{server_id}:{server_secret}".encode()).decode()
+
+        # Define the URL for token request
+        token_url = "https://mozaik.ilabt.imec.be/auth/realms/obelisk/protocol/openid-connect/token"
+
+        # Define the headers
+        headers = {
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        # Define the data for the POST request
+        data = {
+            "grant_type": "client_credentials"
+        }
+
+        try:
+            # Make the POST request to get the token
+            response = requests.post(token_url, headers=headers, data=data)
+
+            # Check if the request was successful (status code 200)
+            if response.status_code == 200:
+                # Parse and return the JWT token from the JSON response
+                return response.json().get('access_token')
+            else:
+                raise Exception(f"Failed to request JWT token: {response.status_code} - {response.text}")
+        except requests.RequestException as e:
+            raise Exception(f"Error requesting JWT token: {e}")
+
+    def get_data(self, analysis_id, user_id, data_index):
+        """
+        Get data for inference from the Mozaik Obelisk.
 
         Arguments:
             user_id (str) : The ID of the user.
@@ -28,26 +68,34 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the user data.
         """
-        endpoint = '/getData'
+        # Construct the endpoint with the analysis ID
+        endpoint = f"/data/query/{analysis_id}"
 
-        # Encode the data_index list as a UTF-8 string
-        data_index_encoded = urllib.parse.urlencode({'data_index': data_index}, doseq=True)
+        # Prepare the request body
+        request_body = {
+            "user_id": user_id,
+            "data_index": data_index
+        }
 
-        # Construct the full URL with parameters
-        url = f'{self.base_url}{endpoint}?user_id={user_id}&data_index={data_index_encoded}'
-
+        # Make the POST request to the endpoint
         try:
-            # Make the GET request
-            response = requests.get(url)
+            response = requests.post(
+                f"{self.base_url}{endpoint}",
+                json=request_body,
+                headers={
+                    "authorization": self.auth_token  
+                }
+            )
 
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
-                # Parse and return the user_data from the JSON response
+                # Parse and return the user data from the JSON response
                 return "OK", response.json().get('user_data')
             else:
-                # Returnn an error message if the request was not successful
+                # Return an error message if the request was not successful
                 return "Error", response
         except requests.RequestException as e:
+            print(e)
             # Return an error message if the request encountered an exception
             return "Exception", e
 
@@ -61,14 +109,14 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the key share.
         """
-        endpoint = f'/getKeyShare/{analysis_id}'
+        endpoint = f'/mpc/keys/share/{analysis_id}'
 
         # Construct the full URL with parameters
         url = f'{self.base_url}{endpoint}'
 
         try:
             # Make the GET request
-            response = requests.get(url)
+            response = requests.get(url, headers={"authorization": self.auth_token})
 
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
@@ -93,21 +141,21 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the response.
         """
-        endpoint = '/storeResult'
+        endpoint = f'/analysis/result/{analysis_id}'
 
         # Construct the full URL
         url = f'{self.base_url}{endpoint}'
 
         # Define the payload (data to be sent in the POST request)
         payload = {
-            'analysis_id': analysis_id,
             'user_id': user_id,
-            'result': result
+            'result': result,
+            'is_combined': True
         }
 
         try:
             # Make the POST request
-            response = requests.post(url, json=payload)
+            response = requests.post(url, json=payload, headers={"authorization": self.auth_token})
 
             # Check if the request was successful (status code 200)
             if response.status_code == 200:

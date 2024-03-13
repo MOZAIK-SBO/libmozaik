@@ -21,7 +21,8 @@ class TestTaskManager(unittest.TestCase):
         self.mock_app = MagicMock()
         self.mock_config = MagicMock()
         self.mock_aes_config = MagicMock()
-        self.task_manager = TaskManager(self.mock_app, self.mock_db, Config('server0.toml'), Rep3AesConfig('rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes'))
+        with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
+            self.task_manager = TaskManager(self.mock_app, self.mock_db, Config('server0.toml'), Rep3AesConfig('rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes'))
 
         
     def test_write_shares(self):
@@ -168,9 +169,10 @@ class TestTaskManager(unittest.TestCase):
         aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
         key_shares = TestRep3Aes.secret_share(aes_key)
 
-        task_manager1 = TaskManager(mock_app1, db1, Config('server0.toml'), Rep3AesConfig(f'rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes'))
-        task_manager2 = TaskManager(mock_app2, db2, Config('server1.toml'), Rep3AesConfig(f'rep3aes/p2.toml', 'rep3aes/target/release/rep3-aes'))
-        task_manager3 = TaskManager(mock_app3, db3, Config('server2.toml'), Rep3AesConfig(f'rep3aes/p3.toml', 'rep3aes/target/release/rep3-aes'))
+        with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
+            task_manager1 = TaskManager(mock_app1, db1, Config('server0.toml'), Rep3AesConfig(f'rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes'))
+            task_manager2 = TaskManager(mock_app2, db2, Config('server1.toml'), Rep3AesConfig(f'rep3aes/p2.toml', 'rep3aes/target/release/rep3-aes'))
+            task_manager3 = TaskManager(mock_app3, db3, Config('server2.toml'), Rep3AesConfig(f'rep3aes/p3.toml', 'rep3aes/target/release/rep3-aes'))
 
         # Create threads to run the test with different configurations in parallel
         thread1 = threading.Thread(target=process_test, args=(task_manager1,key_shares[0],0,))

@@ -47,7 +47,7 @@ class TaskManager:
         self.request_thread.daemon = True
         self.request_thread.start()   
 
-        self.mozaik_obelisk = MozaikObelisk('http://127.0.0.1')
+        self.mozaik_obelisk = MozaikObelisk('https://mozaik.ilabt.imec.be/api', self.config.CONFIG_SERVER_ID, self.config.CONFIG_SERVER_SECRET)
         self.request_lock = threading.Lock()
         self.sharesfile = f'MP-SPDZ/Persistence/Transactions-P{self.config.CONFIG_PARTY_INDEX}.data'
 
@@ -225,7 +225,7 @@ class TaskManager:
                     # Lock to ensure thread safety
                     with self.request_lock:
                         # Get the user data corresponding to the user at the requested indices
-                        status, response = self.mozaik_obelisk.get_data(user_id, data_index)
+                        status, response = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
 
                         # Check if the get_data and to Obelisk was succesful
                         if status == "OK":
