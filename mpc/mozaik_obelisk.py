@@ -99,7 +99,6 @@ class MozaikObelisk:
                 # Return an error message if the request was not successful
                 return "Error", response
         except requests.RequestException as e:
-            print(e)
             # Return an error message if the request encountered an exception
             return "Exception", e
 
