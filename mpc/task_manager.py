@@ -246,20 +246,14 @@ class TaskManager:
                         elif status == "Exception":
                             self.error_in_task(analysis_id, 500,f'RequestException: {response}')   
 
-                        # check the length of received ciphertext and thus set the number of samples accordingly
-                        length_of_ciphertext = 187*8+12+16
-                        if len(input_bytes) % length_of_ciphertext != 0:
-                            self.error_in_task(analysis_id, 500,f'Invalid length of ciphertext. Received: {len(input_bytes)}, expected multiple of: {length_of_ciphertext}')
-                        else:
-                            number_of_samples = int(len(input_bytes) / length_of_ciphertext)
 
                         # Insert the status message into the database
                         self.db.set_status(analysis_id, 'Starting computation')
 
-                        for i in range(number_of_samples):
+                        for i in range(len(input_bytes)):
                             try:
                                 # Define a sample = array of 187 elements
-                                sample = input_bytes[i*length_of_ciphertext:i*length_of_ciphertext+length_of_ciphertext]
+                                sample = input_bytes[i]
 
                                 # Run distributed decryption algorithm on the received encrypted sample
                                 decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
@@ -280,6 +274,8 @@ class TaskManager:
                                 self.db.append_result(analysis_id, encrypted_shares.hex())
                             
                             except Exception as e:
+                                if test:
+                                    raise e
                                 self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
 
                             # Update status in the database

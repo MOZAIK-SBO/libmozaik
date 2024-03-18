@@ -35,13 +35,13 @@ class MozaikObeliskTests(unittest.TestCase):
     def test_get_key_share_success(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {'key_share': 123456789}
+        mock_response.json.return_value = {'key_share': '1234567890'}
         mock_get.return_value = mock_response
 
         status, key_share = self.mozaik.get_key_share('a2aad3bb-8997-4384-84dd-d800b5587997')
 
         self.assertEqual(status, "OK")
-        self.assertEqual(key_share, 123456789)
+        self.assertEqual(key_share, bytes.fromhex('1234567890'))
 
     @patch('mozaik_obelisk.requests.get')
     def test_get_key_share_failure(self, mock_get):

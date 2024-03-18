@@ -90,7 +90,11 @@ class MozaikObelisk:
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
                 # Parse and return the user data from the JSON response
-                return "OK", response.json().get('user_data')
+                user_data = response.json().get('user_data')
+                if isinstance(user_data, list):
+                    return "OK", user_data
+                else:
+                    return "Error", "ERROR: User data is not in the expected format (array)"
             else:
                 # Return an error message if the request was not successful
                 return "Error", response
@@ -103,11 +107,11 @@ class MozaikObelisk:
         """
         Get key share from the Mozaik Obelisk. 
 
-        Argumentss:
+        Arguments:
             analysis_id (str) : The ID of the analysis.
 
         Returns:
-            A tuple containing the status and the key share.
+            A tuple containing the status and the key share in bytes form.
         """
         endpoint = f'/mpc/keys/share/{analysis_id}'
 
@@ -121,7 +125,15 @@ class MozaikObelisk:
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
                 # Parse and return the user_data from the JSON response
-                return "OK", response.json().get('key_share')
+                key_share = response.json().get('key_share')
+                if isinstance(key_share, str):
+                    # If key_share is a string, assume it's a hexadecimal representation and convert to bytes
+                    key_share = bytes.fromhex(key_share)
+                elif not isinstance(key_share, bytes):
+                    # If key_share is not bytes or a string, raise an error
+                    return "Error", f"ValueError: key_share obtained in wrong format: {type(key_share)}"
+                
+                return "OK", key_share
             else:
                 # Return an error message if the request was not successful
                 return "Error", response
