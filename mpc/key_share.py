@@ -29,12 +29,17 @@ class MpcPartyKeys:
 def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, ciphertext):
     # create context
     context = bytes(user_id, encoding='utf-8') + keys.get_party_keys_as_bytes()
-    data_indices_buf = bytearray(len(data_indices) * 4)
+    # data_indices are 64-bit numbers
+    data_indices_buf = bytearray(len(data_indices) * 8)
     for i, d in enumerate(data_indices):
-        data_indices_buf[4 * i] = d & 0xff
-        data_indices_buf[4 * i + 1] = (d >> 8) & 0xff
-        data_indices_buf[4 * i + 2] = (d >> 16) & 0xff
-        data_indices_buf[4 * i + 3] = (d >> 24) & 0xff
+        data_indices_buf[8 * i] = d & 0xff
+        data_indices_buf[8 * i + 1] = (d >> 8) & 0xff
+        data_indices_buf[8 * i + 2] = (d >> 16) & 0xff
+        data_indices_buf[8 * i + 3] = (d >> 24) & 0xff
+        data_indices_buf[8 * i + 4] = (d >> 32) & 0xff
+        data_indices_buf[8 * i + 5] = (d >> 40) & 0xff
+        data_indices_buf[8 * i + 6] = (d >> 48) & 0xff
+        data_indices_buf[8 * i + 7] = (d >> 56) & 0xff
     context += data_indices_buf
     context += bytes(analysis_type, encoding='utf-8') + bytes(algorithm, encoding='utf-8') + keys.my_pub_key.export_key(
         format='DER')

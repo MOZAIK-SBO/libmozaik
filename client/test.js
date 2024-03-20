@@ -75,9 +75,9 @@ function bufferToHex (buffer) {
 async function testCreateAnalysisRequestData() {
   const userId = "4d14750e-2353-4d30-ac2b-e893818076d2";
   const iotDeviceKey = new Uint8Array([0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01]);
-  // data indices in Obelisk are UTC timestamps with precision of seconds
-  const dataIndices = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03", "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07", "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
-    .map(datestring => Date.parse(datestring) / 1000);
+  // data indices in Obelisk are UTC timestamps with precision of milliseconds
+  const dataIndices = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03", "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07", "2024-01-24T12:00:08", "2024-01-24T12:00:08.001"]
+    .map(datestring => Date.parse(datestring));
   
   const pk1 = await importRsaKey(mpc1Pubkey);
   const pk2 = await importRsaKey(mpc2Pubkey);
@@ -87,6 +87,7 @@ async function testCreateAnalysisRequestData() {
 
   const cts = await createAnalysisRequestData(userId, iotDeviceKey, "AES-GCM-128", pk1, pk2, pk3, "Heartbeat-Demo-1", dataIndices);
 
+  console.log("testCreateAnalysisRequestData ciphertexts:")
   console.log(bufferToHex(cts[0]));
   console.log(bufferToHex(cts[1]));
   console.log(bufferToHex(cts[2]));
