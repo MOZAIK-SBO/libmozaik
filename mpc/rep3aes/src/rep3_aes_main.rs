@@ -1,15 +1,21 @@
+#![allow(dead_code)]
 mod share;
 mod party;
 mod network;
 mod gcm;
 mod chida;
 mod conversion;
+mod aes;
+mod furukawa;
 
 use std::{fmt::Display, io, path::PathBuf, str::FromStr, time::Duration};
 
+use aes::{ComputeInverse, ComputePhase, InputPhase, MPCProtocol, OutputPhase, PreProcessing};
 use chida::ChidaParty;
 use clap::{Parser, Subcommand};
-use conversion::{convert_boolean_to_ring, convert_ring_to_boolean};
+use conversion::{convert_boolean_to_ring, convert_ring_to_boolean, Z64Bool};
+use furukawa::FurukawaGCMParty;
+use gcm::gf128::GF128;
 use itertools::{izip, Itertools};
 use network::{Config, ConnectedParty};
 use party::{error::{MpcError, MpcResult}, Party};
@@ -28,6 +34,10 @@ type Result<T> = core::result::Result<T, Rep3AesError>;
 struct Cli {
     #[arg(long, value_name = "FILE")]
     config: PathBuf,
+    #[arg(long, value_name = "TIME_SECONDS", help="If set, the server attempts to connect to the other parties until TIME_SECONDS has passed.")]
+    timeout: Option<usize>,
+    #[arg(long, action, help="If set, uses actively secure MPC protocols. Default: not set, i.e., uses passively-secure MPC protocol.")]
+    active: bool,
     #[command(subcommand)]
     command: Commands
 }
@@ -211,8 +221,8 @@ fn return_to_writer<T: Serialize + From<Rep3AesError>, W: io::Write, F: FnOnce()
     }
 }
 
-fn additive_shares_to_rss(party: &mut Party, shares: Vec<GF8>) -> MpcResult<Vec<RssShare<GF8>>> {
-    let (k1, k2, k3) = chida::online::input_round(party, shares)?;
+fn additive_shares_to_rss<Protocol: InputPhase<GF8>>(party: &mut Protocol, shares: Vec<GF8>) -> MpcResult<Vec<RssShare<GF8>>> {
+    let (k1, k2, k3) = party.input_round(&shares)?;
     let key_share_rss: Vec<_> = izip!(k1, k2, k3)
         .map(|(k1, k2, k3)| k1 + k2 + k3)
         .collect();
@@ -231,26 +241,41 @@ impl From<io::Error> for Rep3AesError {
     }
 }
 
+fn aes_gcm_128_enc<Protocol: PreProcessing<Z64Bool> + PreProcessing<GF8> + PreProcessing<GF128> + InputPhase<GF8> + ComputePhase<Z64Bool> + MPCProtocol + ComputePhase<GF8> + ComputeInverse<GF8> + ComputePhase<GF128> + OutputPhase<GF8>>(party: &mut Protocol, party_index: usize, encrypt_args: EncryptParams) -> Result<EncryptResult> {
+    let key_share = additive_shares_to_rss(party, encrypt_args.key_share)?;
+    let (message_share_si, message_share_sii): (Vec<_>, Vec<_>) = encrypt_args.message_share.into_iter().unzip();
+    PreProcessing::<Z64Bool>::pre_processing(party, 2*64*message_share_si.len())?;
+    let (mul_gf8, mul_gf128) = gcm::get_required_mult_for_aes128_gcm(encrypt_args.associated_data.len(), message_share_si.len()*8);
+    PreProcessing::<GF8>::pre_processing(party, mul_gf8)?;
+    PreProcessing::<GF128>::pre_processing(party, mul_gf128)?;
+    let message_share = convert_ring_to_boolean(party, party_index, &message_share_si, &message_share_sii)?;
+    let (mut tag, mut ct) = gcm::aes128_gcm_encrypt(party, &encrypt_args.nonce, &key_share, &message_share, &encrypt_args.associated_data)?;
+    ct.append(&mut tag);
+    // open ct||tag
+    let ct_and_tag = party.output_to(&ct, &ct, &ct)?;
+    party.finalize()?;
+    Ok(EncryptResult::new(ct_and_tag))
+}
+
 fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, output_writer: W) {
     let (party_index, config) = Config::from_file(&cli.config).unwrap();
-
+    let timeout = cli.timeout.map(|secs| Duration::from_secs(secs as u64));
     match cli.command {
         Commands::Encrypt { mode } => {
             let encrypt_args = parse_args_from_reader::<EncryptArgs,EncryptParams, _>(input_arg_reader).unwrap();
             match mode {
                 Mode::AesGcm128 => {
                     return_to_writer(|| {
-                        let connected = ConnectedParty::bind_and_connect(party_index, config, Some(Duration::from_secs_f32(1.0)))?;
-                        let mut party = ChidaParty::setup(connected);
-                        
-                        let key_share = additive_shares_to_rss(party.inner_mut(), encrypt_args.key_share)?;
-                        let (message_share_si, message_share_sii): (Vec<_>, Vec<_>) = encrypt_args.message_share.into_iter().unzip();
-                        let message_share = convert_ring_to_boolean(party.inner_mut(), &message_share_si, &message_share_sii)?;
-                        let (mut tag, mut ct) = gcm::aes128_gcm_encrypt(party.inner_mut(), &encrypt_args.nonce, &key_share, &message_share, &encrypt_args.associated_data)?;
-                        ct.append(&mut tag);
-                        // open ct||tag
-                        let ct_and_tag = chida::online::output_round(party.inner_mut(), &ct, &ct, &ct)?;
-                        Ok(EncryptResult::new(ct_and_tag))
+                        let connected = ConnectedParty::bind_and_connect(party_index, config, timeout)?;
+                        if cli.active {
+                            let mut party = FurukawaGCMParty::setup(connected)?;
+                            let party_index = party.inner_mut().i;
+                            aes_gcm_128_enc(&mut party, party_index, encrypt_args)
+                        }else{
+                            let mut party = ChidaParty::setup(connected)?;
+                            let party_index = party.inner_mut().i;
+                            aes_gcm_128_enc(&mut party, party_index, encrypt_args)
+                        }
                     }, output_writer);
                 }
             }  
@@ -260,17 +285,17 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
             match mode {
                 Mode::AesGcm128 => {
                     return_to_writer(|| {
-                        let connected = ConnectedParty::bind_and_connect(party_index, config, Some(Duration::from_secs_f32(3.0)))?;
-                        let mut party = ChidaParty::setup(connected);
-                        let key_share = additive_shares_to_rss(party.inner_mut(), decrypt_args.key_share)?;
+                        let connected = ConnectedParty::bind_and_connect(party_index, config, timeout)?;
+                        let mut party = ChidaParty::setup(connected)?;
+                        let key_share = additive_shares_to_rss(&mut party, decrypt_args.key_share)?;
                         // split ciphertext and tag; tag is the last 16 bytes
                         let ctlen = decrypt_args.ciphertext.len();
                         let (ct, tag) = (&decrypt_args.ciphertext[..ctlen-16], &decrypt_args.ciphertext[ctlen-16..]);
-                        let res = gcm::aes128_gcm_decrypt(party.inner_mut(), &decrypt_args.nonce, &key_share, ct, tag, &decrypt_args.associated_data, gcm::semi_honest_tag_check);
+                        let res = gcm::aes128_gcm_decrypt(&mut party, &decrypt_args.nonce, &key_share, ct, tag, &decrypt_args.associated_data, gcm::semi_honest_tag_check);
                         match res {
                             Ok(message_share) => {
                                 // now run b2a conversion
-                                let (ring_shares_si, ring_shares_sii) = convert_boolean_to_ring(party.inner_mut(), message_share.into_iter())?;
+                                let (ring_shares_si, ring_shares_sii) = convert_boolean_to_ring(&mut party, party_index, message_share.into_iter())?;
                                 let ring_shares = ring_shares_si.into_iter().zip(ring_shares_sii).collect();
                                 Ok(DecryptResult::new_success(ring_shares))
                             },
@@ -330,6 +355,63 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
+                    active: false,
+                    timeout: None,
+                    command: Commands::Encrypt { mode: Mode::AesGcm128 }
+                };
+
+                let list_of_numbers = message_share.0.into_iter().zip(message_share.1).map(|(vi, vii)| format!("[{}, {}]", vi, vii)).join(", ");
+
+                // prepare input arg
+                let input_arg = format!("{{\"key_share\": \"{}\", \"nonce\": \"{}\", \"associated_data\": \"{}\", \"message_share\": [{}]}}", key_share, NONCE, AD, list_of_numbers);
+                let mut output = BufWriter::new(Vec::new());
+                execute_command(cli, input_arg.as_bytes(), &mut output);
+
+                // check what is written to the output
+                let buf = output.into_inner().unwrap();
+                let res: EncryptResult = serde_json::from_slice(&buf).unwrap();
+
+                assert!(res.ciphertext.is_some());
+                assert!(res.error.is_none());
+                let ciphertext = res.ciphertext.unwrap();
+                
+                assert_eq!(ciphertext.len(), CT.len() + TAG.len());
+                assert_eq!(&ciphertext[..CT.len()], CT);
+                assert_eq!(&ciphertext[CT.len()..], TAG);
+            }
+        };
+
+        let h1 = thread::spawn(party_f(0, KEY_SHARE_1, (r1.clone(), r2.clone())));
+        let h2 = thread::spawn(party_f(1, KEY_SHARE_2, (r2, r3.clone())));
+        let h3 = thread::spawn(party_f(2, KEY_SHARE_3, (r3, r1)));
+
+        h1.join().unwrap();
+        h2.join().unwrap();
+        h3.join().unwrap();
+
+        drop(guard);        
+    }
+
+    //#[test] todo: implement malicius cut-and-choose for bool, then retry
+    fn encrypt_aes_gcm_128_malicious() {
+        // before running this test, make sure that the ports in p1/p2/p3.toml are free
+        let guard = PORT_LOCK.lock().unwrap();
+
+        let mut rng = thread_rng();
+        let (r1, r2, r3) = secret_share_vector_ring(&mut rng, &MESSAGE_RING);
+
+        let party_f = |i: usize, key_share: &'static str, message_share: (Vec<u64>, Vec<u64>)| {
+            move || {
+                let path = match i {
+                    0 => "p1.toml",
+                    1 => "p2.toml",
+                    2 => "p3.toml",
+                    _ => panic!()
+                };
+                let cli = Cli {
+                    config: PathBuf::from(path),
+                    active: true,
+                    timeout: None,
                     command: Commands::Encrypt { mode: Mode::AesGcm128 }
                 };
 
@@ -380,6 +462,8 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
+                    active: false,
+                    timeout: None,
                     command: Commands::Decrypt { mode: Mode::AesGcm128 }
                 };
                 // prepare input arg
