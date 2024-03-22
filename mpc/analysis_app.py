@@ -29,6 +29,7 @@ class AnalysisApp:
         self.config = Config(config_path)
         self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes')
         self.app = Flask(__name__)
+        print('Application started')
         self.db = Database('ecg_inference_database.db')
         self.initialize()
  
@@ -74,6 +75,16 @@ class AnalysisApp:
                 response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
                       
+
+        @self.app.route('/health', methods=['GET'])
+        def health_check():
+            """
+            Route to perform a health check on the application.
+
+            Returns:
+                JSON: The health status of the application.
+            """
+            return jsonify(status="OK"), 200
 
         @self.app.route('/status/<analysis_id>', methods=['GET'])
         def get_analysis_status(analysis_id):
