@@ -29,7 +29,6 @@ class AnalysisApp:
         self.config = Config(config_path)
         self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes')
         self.app = Flask(__name__)
-        print('Application started')
         self.db = Database('ecg_inference_database.db')
         self.initialize()
  
@@ -149,6 +148,7 @@ class AnalysisApp:
 
     def start_background_thread(self):
         # Mutual TLS authentication
+        print('Application started')
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(self.config.CONFIG_SERVER_CERT, self.config.CONFIG_SERVER_KEY)
         context.verify_mode = ssl.CERT_REQUIRED
