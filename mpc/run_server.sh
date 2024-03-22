@@ -12,7 +12,7 @@ run_flask_app() {
 }
 
 # Main script
-if session_exists "test"; then
+if session_exists "mozaik_app"; then
     # If the session exists, kill it first
     tmux kill-session -t "mozaik_app"
 fi
