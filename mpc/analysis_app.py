@@ -75,8 +75,6 @@ class AnalysisApp:
                 response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
                       
-                
-            # return render_template('index.html')
 
         @self.app.route('/health', methods=['GET'])
         def health_check():

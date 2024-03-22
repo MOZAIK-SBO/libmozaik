@@ -285,9 +285,11 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
             match mode {
                 Mode::AesGcm128 => {
                     return_to_writer(|| {
+
                         let connected = ConnectedParty::bind_and_connect(party_index, config, timeout)?;
                         let mut party = ChidaParty::setup(connected)?;
                         let key_share = additive_shares_to_rss(&mut party, decrypt_args.key_share)?;
+
                         // split ciphertext and tag; tag is the last 16 bytes
                         let ctlen = decrypt_args.ciphertext.len();
                         let (ct, tag) = (&decrypt_args.ciphertext[..ctlen-16], &decrypt_args.ciphertext[ctlen-16..]);
