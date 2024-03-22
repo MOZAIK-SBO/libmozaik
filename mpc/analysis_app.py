@@ -50,15 +50,19 @@ class AnalysisApp:
                 JSON: The response containing the analysis status.
             """
             if request.method == 'POST':
-                # Get JSON data from the request
-                data = request.get_json()
-
-                # Extract data fields
-                analysis_id = data.get('analysis_id')
-                user_id = data.get('user_id')
-                data_index = data.get('data_index', [])
-                user_key = data.get('user_key')
-                analysis_type = data.get('analysis_type')
+                
+                try:
+                    # Get JSON data from the request
+                    data = request.get_json()
+                
+                    # Extract data fields
+                    analysis_id = data.get('analysis_id')
+                    user_id = data.get('user_id')
+                    data_index = data.get('data_index', [])
+                    user_key = data.get('user_key')
+                    analysis_type = data.get('analysis_type')
+                except (ValueError, AttributeError) as e:
+                    return jsonify(error=f"Error getting data from json POST request. Expecting analysis_id, user_id, data_index as an array, user_key and analysis_type. {e}"), 400
 
                 # Validate analysis_id as a UUIDv4
                 try:
@@ -144,12 +148,10 @@ class AnalysisApp:
 
 
     def start_background_thread(self):
-        # Run the Flask app
-        if __name__ == '__main__':
-            # Mutual TLS authentication
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain(self.config.CONFIG_SERVER_CERT, self.config.CONFIG_SERVER_KEY)
-            context.verify_mode = ssl.CERT_REQUIRED
-            context.load_verify_locations(self.config.CONFIG_CA_CERT)
-            self.app.run(debug=True, host='0.0.0.0', port=self.config.CONFIG_PORT, ssl_context=context)
+        # Mutual TLS authentication
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(self.config.CONFIG_SERVER_CERT, self.config.CONFIG_SERVER_KEY)
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.load_verify_locations(self.config.CONFIG_CA_CERT)
+        self.app.run(debug=True, host='0.0.0.0', port=self.config.CONFIG_PORT, ssl_context=context)
         
