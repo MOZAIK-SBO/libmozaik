@@ -12,7 +12,7 @@ class AnalysisAppTests(unittest.TestCase):
                 # Create the AnalysisApp instance
                 self.app = AnalysisApp('server0.toml')
                 self.client = self.app.app.test_client()
-                self.app.start_background_thread()
+                # self.app.start_background_thread()
 
     def tearDown(self):
         self.app.db.delete_database()
