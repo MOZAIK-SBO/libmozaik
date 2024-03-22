@@ -74,18 +74,6 @@ class AnalysisApp:
                 response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
                       
-                
-            # return render_template('index.html')
-
-        @self.app.route('/health', methods=['GET'])
-        def health_check():
-            """
-            Route to perform a health check on the application.
-
-            Returns:
-                JSON: The health status of the application.
-            """
-            return jsonify(status="OK"), 200
 
         @self.app.route('/status/<analysis_id>', methods=['GET'])
         def get_analysis_status(analysis_id):
