@@ -1,5 +1,6 @@
 import requests
 import base64
+import time
 
 class MozaikObelisk:
     """
@@ -17,7 +18,10 @@ class MozaikObelisk:
             auth_token (str) : The JWT token to authorise to Obelisk
         """
         self.base_url = base_url
+        self.server_id = server_id
+        self.server_secret = server_secret
         self.auth_token = self.request_jwt_token(server_id, server_secret)
+        self.token_timestamp = time.time()
 
     def request_jwt_token(self, server_id, server_secret):
         """
@@ -51,11 +55,21 @@ class MozaikObelisk:
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
                 # Parse and return the JWT token from the JSON response
-                return response.json().get('access_token')
+                return f"Bearer {response.json().get('access_token')}"
             else:
                 raise Exception(f"Failed to request JWT token: {response.status_code} - {response.text}")
         except requests.RequestException as e:
             raise Exception(f"Error requesting JWT token: {e}")
+        
+    def check_token(self):
+        """
+        Check if the JWT token has expired, if it has request a new one.
+        """
+        # Check if the token has been initialized and if it's been more than 5 minutes since its creation
+        if time.time() - self.token_timestamp > 240:
+            # Token is about to expire, generate a new one
+            self.auth_token = self.request_jwt_token(self.server_id, self.server_secret)
+            self.token_timestamp = time.time()  # Update the token timestamp
 
     def get_data(self, analysis_id, user_id, data_index):
         """
@@ -68,8 +82,12 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the user data.
         """
+
+        # Check token expiry before making the request
+        self.check_token()
+
         # Construct the endpoint with the analysis ID
-        endpoint = f"/data/query/{analysis_id}"
+        endpoint = f"/analyse/data/query/{analysis_id}"
 
         # Prepare the request body
         request_body = {
@@ -112,6 +130,10 @@ class MozaikObelisk:
         Returns:
             A tuple containing the status and the key share in bytes form.
         """
+
+        # Check token expiry before making the request
+        self.check_token()
+
         endpoint = f'/mpc/keys/share/{analysis_id}'
 
         # Construct the full URL with parameters
