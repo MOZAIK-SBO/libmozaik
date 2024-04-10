@@ -87,7 +87,7 @@ class MozaikObelisk:
         self.check_token()
 
         # Construct the endpoint with the analysis ID
-        endpoint = f"/analyse/data/query/{analysis_id}"
+        endpoint = f"/analysis/data/query/{analysis_id}"
 
         # Prepare the request body
         request_body = {

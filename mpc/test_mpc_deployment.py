@@ -87,7 +87,7 @@ if __name__ == "__main__":
     mock_app = MagicMock()
 
     aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
-    key_shares = TestRep3Aes.secret_share(aes_key)
+    key_shares = (bytes.fromhex('f006e3a4a7935cb8e49d3b1a0d0c4ec7'), bytes.fromhex('c0d74c17159c1172578c262c1f874496'), bytes.fromhex('31d3acb7b7094ac2ba1b163a1f850541'))
 
     with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
         task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes'))
