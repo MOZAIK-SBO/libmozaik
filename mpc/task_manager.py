@@ -225,78 +225,82 @@ class TaskManager:
                     # Lock to ensure thread safety
                     with self.request_lock:
                         # Get the user data corresponding to the user at the requested indices
-                        status, response = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
+                        status_get_data, response_get_data = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
 
-                        # Check if the get_data and to Obelisk was succesful
-                        if status == "OK":
-                            input_bytes = response
-                        elif status == "Error":
-                            self.error_in_task(analysis_id, response.status_code, response.text)
-                        elif status == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {response}')  
+                        # Check if the get_data to Obelisk was succesful
+                        if status_get_data == "OK":
+                            input_bytes = response_get_data
+                        elif status_get_data == "Error":
+                            self.error_in_task(analysis_id, response_get_data.status_code, response_get_data.text)
+                        elif status_get_data == "Exception":
+                            self.error_in_task(analysis_id, 500,f'RequestException: {response_get_data}')  
 
                         # Get the shares of the key 
-                        status, response = self.mozaik_obelisk.get_key_share(analysis_id)
+                        status_key_share, response_key_share = self.mozaik_obelisk.get_key_share(analysis_id)
 
                         # Check if the get_key_share to Obelisk was succesful
-                        if status == "OK":
-                            key_share = response
-                        elif status == "Error":
-                            self.error_in_task(analysis_id, response.status_code, response.text)
-                        elif status == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {response}')   
+                        if status_key_share == "OK":
+                            key_share = response_key_share
+                        elif status_key_share == "Error":
+                            self.error_in_task(analysis_id, response_key_share.status_code, response_key_share.text)
+                        elif status_key_share == "Exception":
+                            self.error_in_task(analysis_id, 500,f'RequestException: {response_key_share}')   
 
+                        if status_get_data == "OK" and status_key_share == "OK":
+                        
+                            # Insert the status message into the database
+                            self.db.set_status(analysis_id, 'Starting computation')
 
-                        # Insert the status message into the database
-                        self.db.set_status(analysis_id, 'Starting computation')
+                            for i in range(len(input_bytes)):
+                                try:
+                                    # Define a sample = array of 187 elements
+                                    sample = input_bytes[i]
 
-                        for i in range(len(input_bytes)):
-                            try:
-                                # Define a sample = array of 187 elements
-                                sample = input_bytes[i]
+                                    # Run distributed decryption algorithm on the received encrypted sample
+                                    decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
-                                # Run distributed decryption algorithm on the received encrypted sample
-                                decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
+                                    # Set the model and input accordingly
+                                    self.set_model(analysis_id, analysis_type, decrypted_shares)
 
-                                # Set the model and input accordingly
-                                self.set_model(analysis_id, analysis_type, decrypted_shares)
+                                    # Run the inference on the single sample
+                                    self.run_inference(analysis_id)
 
-                                # Run the inference on the single sample
-                                self.run_inference(analysis_id)
+                                    # Read and decode boolean shares in field from the Persistence file
+                                    shares_to_encrypt = self.read_shares(analysis_id)
 
-                                # Read and decode boolean shares in field from the Persistence file
-                                shares_to_encrypt = self.read_shares(analysis_id)
+                                    # Run distributed encryption on the final result
+                                    encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
 
-                                # Run distributed encryption on the final result
-                                encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
+                                    # Append the encrypted result to the database
+                                    self.db.append_result(analysis_id, encrypted_shares.hex())
+                                
+                                except Exception as e:
+                                    if test:
+                                        raise e
+                                    self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
 
-                                # Append the encrypted result to the database
-                                self.db.append_result(analysis_id, encrypted_shares.hex())
-                            
-                            except Exception as e:
-                                if test:
-                                    raise e
-                                self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                                # Update status in the database
+                                self.db.set_status(analysis_id, 'Completed')
 
-                            # Update status in the database
-                            self.db.set_status(analysis_id, 'Completed')
+                                # send the result to Obelisk
+                                result = self.db.read_entry(analysis_id)
+                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result)
 
-                            # send the result to Obelisk
-                            result = self.db.read_entry(analysis_id)
-                            status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result)
-
-                            # Check if the store_result to Obelisk was succesful
-                            if status == "OK":
-                                self.db.set_status(analysis_id, "Sent")
-                            elif status == "Error":
-                                self.error_in_task(analysis_id, response.status_code, response.text)
-                            elif status == "Exception":
-                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
-                    
-                        # Remove the request from the queue after processing
-                        if test:
-                            break
-                        self.request_queue.task_done()
+                                # Check if the store_result to Obelisk was succesful
+                                if status == "OK":
+                                    self.db.set_status(analysis_id, "Sent")
+                                elif status == "Error":
+                                    self.error_in_task(analysis_id, response.status_code, response.text)
+                                elif status == "Exception":
+                                    self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
+                        
+                            # Remove the request from the queue after processing
+                            if test:
+                                break
+                            self.request_queue.task_done()
+                        else:
+                            print("Check status: Computation not started, error retrieving data from Obelisk.")
+                            self.request_queue.task_done()
                 else:
                     self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
             except Exception as e:
