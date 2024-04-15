@@ -38,7 +38,7 @@ def process_test(task_manager, key_share, config_index):
     analysis_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
     user_id = "e7514b7a-9293-4c83-b733-a53e0e449635"
     analysis_type = "Heartbeat-Demo-1"
-    data_index = [1, 2]  # Example data index
+    data_index = [1706094000000, 1706094001000]  # Example data index
 
     # Mock the methods of MozaikObelisk class
     mock_mozaik_obelisk = MagicMock()
@@ -83,15 +83,18 @@ def process_test(task_manager, key_share, config_index):
 if __name__ == "__main__":
     config_index = int(sys.argv[1])
 
+    if os.path.exists('test.db'):
+        os.remove('test.db')
+
     db = Database('test.db')
     mock_app = MagicMock()
 
     aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
     key_shares = (bytes.fromhex('f006e3a4a7935cb8e49d3b1a0d0c4ec7'), bytes.fromhex('c0d74c17159c1172578c262c1f874496'), bytes.fromhex('31d3acb7b7094ac2ba1b163a1f850541'))
+    encrypted_key_shares = (bytes.fromhex('4ddc9637e8af64a9cc42003f71c50be0151e945d53d191880de966210d2bee54a2d1233c2e6524ad49af606e1fd3f5c83dc3fa0d6115865709cb4cef70af1fec84d84f0880754320cdf6b81436f2918befe29da0dbe1eb28a9926404f195011557a432db24fd37d29e22cc108c05d7a2ad2972d52b3de542aed462d2a3e1528cd9650d78df32d13ef6f11c4a43a8f45c4ae37df3236ea6cbefb41df7304d0e61967fea4818c361cd65ade8f7db705eb53468f018ebf3754c9119baf0c3f5b25cdd3aff1bc6592a616987317f905481a5a71b90e3b76bc78a1a62af58733f352a3edfa6e21642b19f28ad578148ffb6deccab8ac2fb5cd283fc0fcb323b40cdd9'), bytes.fromhex('795cc08a9e0656950615ea84675fed334d26228f285a0b7b31fc64647dda5b8dac465d012aed9f1820cf357e16df4c4dbb10cb40e879530dac47df4e3f32c78b7463298c590628ec87b108e32fb01b6d299f5c0e3533e99b8674883f5fab9fdc675243dc430601595615c80d240ccd91ef3444ec3ff8e43aeb042d9cc63852367b4023f048203f8432d0b908e7ea2a9fdc58031bf30080a6702d67181de2a30f020e692aacbcd65201423421f346f4e6045dfc45d56817006176bc33a344ae33600e4dda31652434bff77a9e0c9a06e368ba2ee6cdb964cb5418c8464e3c2b0ab7f48c20e1e92ac6739b784010c75fcd5463372d72cf8790e16c3962ebd4af0e'), bytes.fromhex('aff208111d291419077fb42478fd9e015d8e446059f746fc01fa901ca7ce78c3cd8051b75d72568a02615422ed7ea19653ec7a737979555e2e32be6e78af0ac091186e4561c7a88ca069696a06faec8292335c60abbd85e3dd473d3fca41c4a55e948304ef04561ce0174042a105ac329d23da036b9059a5bd4fcb541055afddb78c6b62fe776b4cdcac1858db6affb00e764ff3c5253ecae1bb61bdf29b1f557086389f932dc13539c3e2ab08940b0bf19a3e3f4b4d55a12f936c7be0880b6e619bfc4088a3e414442668ca6b0e7e003dcb3e00fc8d45e2d4def2b1b2982d7c8789f458e386697b30506f9cdf2ac0a79b582b1cfcc1e4c2ea2f9c419dd9ce8e'))
+
 
     with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
         task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes'))
 
-    process_test(task_manager1, key_shares[config_index], config_index)
-
-    os.remove('test.db')
+    process_test(task_manager1, encrypted_key_shares[config_index], config_index)
