@@ -7,7 +7,7 @@ import time
 
 from mozaik_obelisk import MozaikObelisk
 from rep3aes import dist_dec, dist_enc
-from key_share import MpcPartyKeys
+from key_share import MpcPartyKeys, decrypt_key_share
 
 class TaskManager:
     """
@@ -240,11 +240,19 @@ class TaskManager:
 
                         # Check if the get_key_share to Obelisk was succesful
                         if status_key_share == "OK":
-                            key_share = response_key_share
+                            encrypted_key_share = response_key_share
                         elif status_key_share == "Error":
                             self.error_in_task(analysis_id, response_key_share.status_code, response_key_share.text)
                         elif status_key_share == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {response_key_share}')   
+                            self.error_in_task(analysis_id, 500,f'RequestException: {response_key_share}')  
+
+                        try:
+                            key_share = decrypt_key_share(self.keys, user_id, "AES-GCM-128", data_index, analysis_type, encrypted_key_share) 
+                        except Exception as e:
+                            if test:
+                                raise e
+                            status_key_share = "Exception"
+                            self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
 
                         if status_get_data == "OK" and status_key_share == "OK":
                         
