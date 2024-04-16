@@ -69,6 +69,15 @@ certificate = "keys/p3.pem"
 private_key = "keys/p3.key"
 EOF
 
+# Edit the run_server.sh script and insert the party_index parameter
+print_green "Editing run_server.sh to insert the party_index parameter"
+sed -i "s/^tmux new-session -d -s \"mozaik_app\" 'python3 main.py server[0-9].toml > mozaik_app.log 2>&1'$/tmux new-session -d -s \"mozaik_app\" 'python3 main.py server${1}.toml > mozaik_app.log 2>&1'/g" run_server.sh || print_red_and_exit "Failed to edit run_server.sh"
+
 # Run test_mpc_deployment script
 print_green "Running test_mpc_deployment script for party $1"
 python3 test_mpc_deployment.py "$1" || print_red_and_exit "Failed to run test_mpc_deployment.py"
+
+print_green "Configuration completed successfully!"
+
+print_green "Starting the server in a tmux session"
+bash run_server.sh || print_red_and_exit "Failed to run run_server.sh"
