@@ -264,6 +264,14 @@ class TaskManager:
                                     # Define a sample = array of 187 elements
                                     sample = input_bytes[i]
 
+                                    # Check whther sample is in the right format, if not, convert it to bytes
+                                    if isinstance(sample, str):
+                                        # If sample is a string, assume it's a hexadecimal representation and convert to bytes
+                                        sample = bytes.fromhex(sample)
+                                    elif not isinstance(sample, bytes):
+                                        # If key_share is not bytes or a string, raise an error
+                                        self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+
                                     # Run distributed decryption algorithm on the received encrypted sample
                                     decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
 
