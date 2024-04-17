@@ -20,7 +20,7 @@ cd rep3aes || print_red_and_exit "Failed to change directory"
 
 # Run cargo build --verbose
 print_green "Building rep3aes"
-cargo build --verbose || print_red_and_exit "Cargo build failed"
+cargo build --release || print_red_and_exit "Cargo build failed"
 
 # Change directory to MP-SPDZ
 cd ../MP-SPDZ || print_red_and_exit "Failed to change directory"
@@ -28,6 +28,10 @@ cd ../MP-SPDZ || print_red_and_exit "Failed to change directory"
 # Write HOSTS file
 print_green "Writing HOSTS file"
 printf "10.10.168.46:8000\n10.10.168.47:8000\n10.10.168.48:8000\n10.10.168.49:8000\n" > HOSTS
+
+# Write MP-SPDZ config file
+print_green "Writing CONFIG.mine file"
+printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC" > CONFIG.mine
 
 # Build malicious-rep-ring-party.x
 print_green "Building malicious-rep-ring-party.x"
@@ -47,7 +51,7 @@ cd ../rep3aes || print_red_and_exit "Failed to change directory"
 # Write TOML configuration file for all parties
 party_index=$(( $1 + 1 ))
 print_green "Writing TOML configuration file for party $1"
-cat << EOF > "p${1}.toml"
+cat << EOF > "p${party_index}.toml"
 party_index = $party_index
 
 [p1]
@@ -74,7 +78,7 @@ cd ../
 
 # Edit the run_server.sh script and insert the party_index parameter
 print_green "Editing run_server.sh to insert the party_index parameter"
-sed -i "s/^tmux new-session -d -s \"mozaik_app\" 'python3 main.py server[0-9].toml > mozaik_app.log 2>&1'$/tmux new-session -d -s \"mozaik_app\" 'python3 main.py server${1}.toml > mozaik_app.log 2>&1'/g" run_server.sh || print_red_and_exit "Failed to edit run_server.sh"
+sed -i "s|^\(tmux new-session -d -s \"mozaik_app\" 'python3 main.py server\)[0-9]*\(.*\)$|\1${1}\2|g" run_server.sh || print_red_and_exit "Failed to edit run_server.sh"
 
 # Run test_mpc_deployment script
 print_green "Running test_mpc_deployment script for party $1"
