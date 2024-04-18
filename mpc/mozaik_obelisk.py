@@ -192,9 +192,9 @@ class MozaikObelisk:
             response = requests.post(url, json=payload, headers={"authorization": self.auth_token})
 
             # Check if the request was successful (status code 200)
-            if response.status_code == 200:
+            if response.status_code == 204:
                 # Parse and return any relevant information from the JSON response
-                return "OK", response.json()
+                return "OK", response
             else:
                 # Return an error message if the request was not successful
                 return "Error", response
