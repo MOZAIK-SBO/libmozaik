@@ -300,7 +300,7 @@ class TaskManager:
 
                                 # send the result to Obelisk
                                 result = self.db.read_entry(analysis_id)
-                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result)
+                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result[2])
 
                                 # Check if the store_result to Obelisk was succesful
                                 if status == "OK":

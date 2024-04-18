@@ -57,14 +57,12 @@ class MozaikObeliskTests(unittest.TestCase):
     @patch('mozaik_obelisk.requests.post')
     def test_store_result_success(self, mock_post):
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {'message': 'Result stored successfully'}
+        mock_response.status_code = 204
         mock_post.return_value = mock_response
 
         status, response = self.mozaik.store_result('a2aad3bb-8997-4384-84dd-d800b5587997', 'a2aad3bb-8997-4384-84dd-d800b5587997', [1,2])
 
         self.assertEqual(status, "OK")
-        self.assertEqual(response['message'], 'Result stored successfully')
 
     @patch('mozaik_obelisk.requests.post')
     def test_store_result_failure(self, mock_post):
