@@ -48,6 +48,13 @@ class DatabaseTests(unittest.TestCase):
         entry = self.db.read_entry('6')
         self.assertIsNone(entry)
 
+    def test_reset_result(self):
+        self.db.create_entry('7')
+        self.db.append_result('7', 'result_part_1')
+        self.db.reset_result('7')
+        entry = self.db.read_entry('7')
+        self.assertIsNone(entry[2])
+
     def tearDown(self):
         # Delete the database file if it exists
         if os.path.exists(self.db_path):

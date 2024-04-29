@@ -135,7 +135,7 @@ class AnalysisApp:
             elif status.startswith('Sent'):
                 # If it starts with 'Sent', return 'COMPLETED' 
                 # self.db.delete_entry(analysis_id)
-                return jsonify(type="COMPLETED", details = "Computation completed and result was successfully sent to Obelisk. The DB entry of this analysis is now deleted."), 200
+                return jsonify(type="RUNNING", details = f"Some computations completed and results were successfully sent to Obelisk. {status}"), 200
 
             elif not status.strip():
                 # If it's empty, return 'FAILED'
