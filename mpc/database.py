@@ -69,7 +69,7 @@ class Database:
                 # If the entry exists, update it
                 db_cursor.execute('''
                     UPDATE inference_results
-                    SET status = ?
+                    SET status = ?, result = NULL
                     WHERE analysis_id = ?
                 ''', ('Queuing', analysis_id))
                 db_connection.commit()
@@ -169,6 +169,32 @@ class Database:
         
         except Exception as e:
             raise Exception(f"Error reading entry: {e}")
+        finally:
+            db_connection.close()
+
+    def reset_result(self, analysis_id):
+        """
+        Reset the result field of an analysis entry in the database.
+
+        Arguments:
+            analysis_id (str): The ID of the analysis.
+
+        Raises:
+            Exception: If an error occurs while rewriting the entry.
+        """
+        try:
+            db_connection = sqlite3.connect(self.db_path)
+            db_cursor = db_connection.cursor()
+
+            # Check if the entry exists in the database
+            db_cursor.execute('''
+                UPDATE inference_results
+                SET result = NULL
+                WHERE analysis_id = ?
+            ''', (analysis_id,))
+            db_connection.commit()
+        except Exception as e:
+            raise Exception(f"Error resetting result field: {e}")
         finally:
             db_connection.close()
 

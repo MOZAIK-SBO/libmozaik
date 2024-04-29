@@ -295,21 +295,23 @@ class TaskManager:
                                         raise e
                                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
 
-                                # Update status in the database
-                                self.db.set_status(analysis_id, 'Completed')
-
                                 # send the result to Obelisk
                                 result = self.db.read_entry(analysis_id)
                                 status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result[2])
 
                                 # Check if the store_result to Obelisk was succesful
                                 if status == "OK":
-                                    self.db.set_status(analysis_id, "Sent")
+                                    self.db.set_status(analysis_id, f"Sent {i+1} out of {len(input_bytes)}")
+                                    if not test:
+                                        self.db.reset_result(analysis_id)
                                 elif status == "Error":
                                     self.error_in_task(analysis_id, response.status_code, response.text)
                                 elif status == "Exception":
                                     self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                         
+                            # Update status in the database
+                            self.db.set_status(analysis_id, 'Completed')
+
                             # Remove the request from the queue after processing
                             if test:
                                 break
