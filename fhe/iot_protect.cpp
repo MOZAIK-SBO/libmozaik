@@ -50,8 +50,6 @@ int main(int argc, char* argv[]) {
         std::exit(-1);
     }
 
-
-
     PublicKey<DCRTPoly> m_key;
     if (!Serial::DeserializeFromFile(public_kay_path, m_key, SerType::BINARY)) {
         std::cerr << "Could not deserialize public key. Exiting..." << std::endl;
