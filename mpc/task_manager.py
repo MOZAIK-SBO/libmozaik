@@ -259,6 +259,8 @@ class TaskManager:
                             # Insert the status message into the database
                             self.db.set_status(analysis_id, 'Starting computation')
 
+                            results = []
+
                             for i in range(len(input_bytes)):
                                 try:
                                     # Define a sample = array of 187 elements
@@ -283,31 +285,34 @@ class TaskManager:
 
                                     # Read and decode boolean shares in field from the Persistence file
                                     shares_to_encrypt = self.read_shares(analysis_id)
-
-                                    # Run distributed encryption on the final result
-                                    encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
-
-                                    # Append the encrypted result to the database
-                                    self.db.append_result(analysis_id, encrypted_shares.hex())
+                                    results += shares_to_encrypt
+                                    print(results)
                                 
                                 except Exception as e:
                                     if test:
                                         raise e
                                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                            
+                            # Run distributed encryption on the concataneted final result
+                            encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
 
-                                # send the result to Obelisk
-                                result = self.db.read_entry(analysis_id)
-                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result[2])
+                            print(len(encrypted_shares.hex()))
+                            # Append the encrypted result to the database
+                            self.db.append_result(analysis_id, encrypted_shares.hex())
 
-                                # Check if the store_result to Obelisk was succesful
-                                if status == "OK":
-                                    self.db.set_status(analysis_id, f"Sent {i+1} out of {len(input_bytes)}")
-                                    if not test:
-                                        self.db.reset_result(analysis_id)
-                                elif status == "Error":
-                                    self.error_in_task(analysis_id, response.status_code, response.text)
-                                elif status == "Exception":
-                                    self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
+                            # send the result to Obelisk
+                            result = self.db.read_entry(analysis_id)
+                            status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result[2])
+
+                            # Check if the store_result to Obelisk was succesful
+                            if status == "OK":
+                                self.db.set_status(analysis_id, f"Sent")
+                                # if not test:
+                                #     self.db.reset_result(analysis_id)
+                            elif status == "Error":
+                                self.error_in_task(analysis_id, response.status_code, response.text)
+                            elif status == "Exception":
+                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                         
                             # Update status in the database
                             self.db.set_status(analysis_id, 'Completed')
