@@ -2,7 +2,6 @@ import subprocess
 
 import sys
 from pathlib import Path
-from config import FHEConfigFields
 
 class FHEContext:
 
