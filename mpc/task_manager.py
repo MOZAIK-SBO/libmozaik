@@ -258,6 +258,7 @@ class TaskManager:
                         
                             # Insert the status message into the database
                             self.db.set_status(analysis_id, 'Starting computation')
+                            results = []
 
                             for i in range(len(input_bytes)):
                                 try:
@@ -284,30 +285,27 @@ class TaskManager:
                                     # Read and decode boolean shares in field from the Persistence file
                                     shares_to_encrypt = self.read_shares(analysis_id)
 
-                                    # Run distributed encryption on the final result
-                                    encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, shares_to_encrypt)
-
-                                    # Append the encrypted result to the database
-                                    self.db.append_result(analysis_id, encrypted_shares.hex())
+                                    results += shares_to_encrypt
                                 
                                 except Exception as e:
                                     if test:
                                         raise e
                                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                            
+                            # Run distributed encryption on the concataneted final result
+                            encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
 
-                                # send the result to Obelisk
-                                result = self.db.read_entry(analysis_id)
-                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, result[2])
+                            status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())
 
-                                # Check if the store_result to Obelisk was succesful
-                                if status == "OK":
-                                    self.db.set_status(analysis_id, f"Sent {i+1} out of {len(input_bytes)}")
-                                    if not test:
-                                        self.db.reset_result(analysis_id)
-                                elif status == "Error":
-                                    self.error_in_task(analysis_id, response.status_code, response.text)
-                                elif status == "Exception":
-                                    self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
+                            # Check if the store_result to Obelisk was succesful
+                            if status == "OK":
+                                self.db.set_status(analysis_id, f"Sent")
+                                # if not test:
+                                #     self.db.reset_result(analysis_id)
+                            elif status == "Error":
+                                self.error_in_task(analysis_id, response.status_code, response.text)
+                            elif status == "Exception":
+                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                         
                             # Update status in the database
                             self.db.set_status(analysis_id, 'Completed')
@@ -316,11 +314,27 @@ class TaskManager:
                             if test:
                                 break
                             self.request_queue.task_done()
+
+                            del results
+                            del shares_to_encrypt
+                            del encrypted_shares
+                            del status
+                            del response
                         else:
                             print("Check status: Computation not started, error retrieving data from Obelisk.")
                             self.request_queue.task_done()
                 else:
                     self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
+                
+                # Bookeeping
+                del analysis_id
+                del user_id
+                del analysis_type
+                del data_index
+                del input_bytes
+                del encrypted_key_share
+                del key_share
+
             except Exception as e:
                     raise e
     
