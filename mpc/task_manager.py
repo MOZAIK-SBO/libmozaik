@@ -260,6 +260,8 @@ class TaskManager:
                             self.db.set_status(analysis_id, 'Starting computation')
                             results = []
 
+                            results = []
+
                             for i in range(len(input_bytes)):
                                 try:
                                     # Define a sample = array of 187 elements
