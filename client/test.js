@@ -1,4 +1,5 @@
-import { createAnalysisRequestData, reconstructResult } from "./libmozaik.js";
+import { createAnalysisRequestData, reconstructResult, reconstructResultFHE } from "./libmozaik.js";
+import {CC_ser, CT_ser, SK_ser} from "./blob.js"
 
 var crypto = window.crypto;
 
@@ -134,3 +135,25 @@ testReconstructResult()
   .then(() => {
     console.log("Test ReconstructResult ok");
   });
+
+
+async function test_reconstruct_result_fhe() {
+
+    const userId = "4d14750e-2353-4d30-ac2b-e893818076d2";
+    const result = await reconstructResultFHE(userId, CC_ser, SK_ser, CT_ser);
+
+    let all_ok = true;
+    for(let i = 0; i < 200; i++) {
+        all_ok = all_ok && (result[i] === (i+1));
+    }
+    if (all_ok) {
+        console.log("Test passed !");
+    } else {
+        console.log("Test failed :(");
+        console.log(`Decrypted result was ${result}`);
+    }
+}
+
+test_reconstruct_result_fhe().then(() => {
+  console.log("Test ReconstructResultFHE ok");
+})

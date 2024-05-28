@@ -18,7 +18,7 @@ else()
 endif ()
 
 #set( CMAKE_CXX_FLAGS ${OpenFHE_CXX_FLAGS} )
-
+message(STATUS ${OpenFHE_LIBDIR})
 include_directories( ${OPENMP_INCLUDES} )
 include_directories( ${OpenFHE_INCLUDE} )
 include_directories( ${OpenFHE_INCLUDE}/third-party/include )
@@ -31,8 +31,9 @@ link_directories( ${OpenFHE_LIBDIR} )
 link_directories( ${OPENMP_LIBRARIES} )
 
 message(STATUS "${OpenFHE_EXE_LINKER_FLAGS}")
-#set( CMAKE_EXE_LINKER_FLAGS "${OpenFHE_EXE_LINKER_FLAGS} -static")
-link_libraries( ${OpenFHE_STATIC_LIBRARIES} )
+set( CMAKE_EXE_LINKER_FLAGS "-static")
+#link_libraries( ${OpenFHE_STATIC_LIBRARIES} )
+link_libraries(OPENFHEcore_static OPENFHEpke_static OPENFHEbinfhe_static)
 
 # Executable to test network evaluation
 add_executable(fhe main.cpp
@@ -77,3 +78,4 @@ add_executable(iot_protect iot_protect.cpp lib/src/neural_net_io.cpp
         lib/src/neural_net_evaluator.cpp)
 target_include_directories(iot_protect PUBLIC lib/include)
 target_include_directories(iot_protect PUBLIC assets/dependencies/nlohmann-json)
+add_executable(test_deser test_deserial.cpp)

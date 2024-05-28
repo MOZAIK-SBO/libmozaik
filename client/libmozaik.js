@@ -1,3 +1,5 @@
+import Module from "./openfhe_pke_es6.js";
+
 var crypto = window.crypto.subtle;
 
 function append(arrays) {
@@ -87,3 +89,54 @@ export async function reconstructResult(userId, iotDeviceKey, party1Pubkey, part
     return msg;
 }
 
+export async function createAnalysisRequestFHE(userId, analysisType, dataIndices) {
+    return [userId, analysisType, dataIndices];
+}
+
+async function parse_plaintext_from_string(pt_in) {
+    // this function exists because the function "GetPackedCoefsReal" is broken in wasm (no reason why, but it's like that)
+    let plaintext_string = `${pt_in}`;
+    let idx_part = plaintext_string.indexOf(")");
+    let pt_vec = plaintext_string.slice(1, idx_part);
+    let coef_str_arr = pt_vec.split(",");
+    // last entry will be nan since openfhe truncates output after index=batchsize
+    return coef_str_arr.map(parseFloat).slice(0, -1)
+}
+
+async function DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr){
+
+    let OpenFHE = await Module();
+
+    const sertype = OpenFHE.SerType.JSON;
+    // Sample Program: Step 1: Set CryptoContext
+    console.debug("Setting up the Cryptocontext")
+
+    const cc = await OpenFHE.DeserializeCryptoContextFromBuffer(cc_arr, sertype);
+    console.debug("CryptoContext was deserialized properly");
+
+    const ct1 = await OpenFHE.DeserializeCiphertextFromBuffer(ct_arr, sertype);
+    console.debug("CipherText was deserialized properly");
+
+    const sk = await OpenFHE.DeserializePrivateKeyFromBuffer(sk_arr, sertype);
+    console.debug("SecretKey was deserialized properly");
+
+    // Decrypt the result of additions
+    const plaintext = cc.Decrypt(sk, ct1);
+    plaintext.SetLength(cc.GetBatchSize());
+
+    OpenFHE.ReleaseAllContexts();
+
+    return await parse_plaintext_from_string(plaintext);
+}
+
+export async function reconstructResultFHE(userId,cryptoContextSer,secretKeySer,encryptedResultSer) {
+
+    console.log("Executing Reconstruct");
+    let enc = new TextEncoder();
+    let cc_arr = enc.encode(cryptoContextSer);
+    let ct_arr = enc.encode(encryptedResultSer);
+    let sk_arr = enc.encode(secretKeySer);
+
+    // result is an array of doubles
+    return await DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr);
+}

@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 from celery import Celery, shared_task, chain
 from celery.result import AsyncResult, states
 
-from flask import  request, Flask, jsonify
+from flask import request, Flask, jsonify
 from potion import make_potion
 
 import worker

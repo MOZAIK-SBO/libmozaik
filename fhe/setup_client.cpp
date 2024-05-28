@@ -8,6 +8,12 @@
 
 #include "json.hpp"
 #include "openfhe.h"
+
+#include "ciphertext-ser.h"
+#include "cryptocontext-ser.h"
+#include "key/key-ser.h"
+#include "scheme/ckksrns/ckksrns-ser.h"
+
 #include "typedefs.h"
 
 namespace fs = std::filesystem;
@@ -26,6 +32,8 @@ using namespace ckks_nn;
  * of the key generation process.
  *
  */
+
+const auto ser_type = SerType::JSON;
 
 int main(int argc, char* argv[]) {
 
@@ -61,7 +69,7 @@ int main(int argc, char* argv[]) {
     cc_params.SetSecurityLevel(HEStd_NotSet);
     cc_params.SetRingDim(512);
 
-    auto cc = GenCryptoContext(cc_params);
+    CryptoContext<DCRTPoly> cc = GenCryptoContext(cc_params);
     cc->Enable(PKE);
     cc->Enable(LEVELEDSHE);
     cc->Enable(ADVANCEDSHE);
@@ -72,25 +80,25 @@ int main(int argc, char* argv[]) {
     cc->EvalSumKeyGen(key.secretKey);
 
     ////// Serialize all keys
-    if (!Serial::SerializeToFile(key_dir / CC_STRING, cc, SerType::BINARY)) {
+    if (!Serial::SerializeToFile(key_dir / CC_STRING, cc, ser_type)) {
         std::cerr << "Error writing serialization of the crypto context to " << (key_dir / CC_STRING).string()
                   << std::endl;
         std::exit(1);
     }
 
-    if (!Serial::SerializeToFile(key_dir / PUB_STRING, key.publicKey, SerType::BINARY)) {
+    if (!Serial::SerializeToFile(key_dir / PUB_STRING, key.publicKey, ser_type)) {
         std::cerr << "Error writing public key to " << (key_dir / PUB_STRING).string() << std::endl;
         std::exit(1);
     }
 
-    if (!Serial::SerializeToFile(key_dir / SK_STRING, key.secretKey, SerType::BINARY)) {
-        std::cerr << "Error writing public key to " << (key_dir / SK_STRING).string() << std::endl;
+    if (!Serial::SerializeToFile(key_dir / SK_STRING, key.secretKey, ser_type)) {
+        std::cerr << "Error writing secret key to " << (key_dir / SK_STRING).string() << std::endl;
         std::exit(1);
     }
 
     std::ofstream multKeyFile(key_dir / MULT_STRING, std::ios::out | std::ios::binary);
     if (multKeyFile.is_open()) {
-        if (!cc->SerializeEvalMultKey(multKeyFile, SerType::BINARY)) {
+        if (!cc->SerializeEvalMultKey(multKeyFile, ser_type)) {
             std::cerr << "Error writing mult keys" << std::endl;
             std::exit(1);
         }
@@ -103,7 +111,7 @@ int main(int argc, char* argv[]) {
 
     std::ofstream rotationKeyFile(key_dir / AUTO_STRING, std::ios::out | std::ios::binary);
     if (rotationKeyFile.is_open()) {
-        if (!cc->SerializeEvalAutomorphismKey(rotationKeyFile, SerType::BINARY)) {
+        if (!cc->SerializeEvalAutomorphismKey(rotationKeyFile, ser_type)) {
             std::cerr << "Error writing automorphism keys" << std::endl;
             std::exit(1);
         }
@@ -116,7 +124,7 @@ int main(int argc, char* argv[]) {
 
     std::ofstream sumKeyFile(key_dir / SUM_STRING, std::ios::out | std::ios::binary);
     if (sumKeyFile.is_open()) {
-        if (!cc->SerializeEvalAutomorphismKey(sumKeyFile, SerType::BINARY)) {
+        if (!cc->SerializeEvalSumKey(sumKeyFile, ser_type)) {
             std::cerr << "Error writing sum keys" << std::endl;
             std::exit(1);
         }

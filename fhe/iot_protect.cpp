@@ -15,6 +15,8 @@ using json = nlohmann::json;
 using namespace lbcrypto;
 using namespace ckks_nn;
 
+const auto ser_type = SerType::JSON;
+
 // We assume data file are stored with 1 value per line, delimited by \n not \r\n
 std::vector<double> read_data(fs::path& data_path, unsigned int length) {
     std::vector<double> ret(length, 0);
@@ -51,7 +53,7 @@ int main(int argc, char* argv[]) {
     }
 
     PublicKey<DCRTPoly> m_key;
-    if (!Serial::DeserializeFromFile(public_kay_path, m_key, SerType::BINARY)) {
+    if (!Serial::DeserializeFromFile(public_kay_path, m_key, ser_type)) {
         std::cerr << "Could not deserialize public key. Exiting..." << std::endl;
         std::exit(-1);
     }
@@ -64,7 +66,7 @@ int main(int argc, char* argv[]) {
     auto encode_pt = cc->MakeCKKSPackedPlaintext(data);
     auto ct = cc->Encrypt(m_key, encode_pt);
 
-    if (!Serial::SerializeToFile(res_path, ct, SerType::BINARY)) {
+    if (!Serial::SerializeToFile(res_path, ct, ser_type)) {
         std::cerr << "Couldn't serialize output :((( " << std::endl;
         std::exit(-1);
     }
