@@ -144,16 +144,15 @@ class TestTaskManager(unittest.TestCase):
 
             # Retrieve the arguments passed to the store_result method
             store_result_args = mock_mozaik_obelisk.store_result_args
-            print(store_result_args)
     
             # Retrieve the actual encrypted shares written into the database
-            actual_encrypted_shares = task_manager.db.read_entry(analysis_id)
+            actual_encrypted_shares = store_result_args[0][0][2]
 
             (nonce, ad) = prepare_params_for_dist_enc(MpcPartyKeys(get_config(config_index)), user_id, analysis_id, analysis_type)
             
             instance = AES.new(key=bytes.fromhex('0102030405060708090a0b0c0d0e0f10'), mode=AES.MODE_GCM, nonce=nonce)
             instance.update(ad)
-            pt = instance.decrypt(bytes.fromhex(actual_encrypted_shares[2]))
+            pt = instance.decrypt(bytes.fromhex(actual_encrypted_shares))
 
             if (len(pt)-16) % 40 == 0:
                 number_of_samples = int((len(pt)-16) / 40)
