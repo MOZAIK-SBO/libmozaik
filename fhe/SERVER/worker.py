@@ -22,10 +22,10 @@ class FHEDataManager:
         self.ciphertext_dir = self.base_path / "ct"
 
         if not self.key_cache.exists():
-            self.key_cache.mkdir()
+            self.key_cache.mkdir(parents=True, exist_ok=True)
 
         if not self.neural_net_cache.exists():
-            self.neural_net_cache.mkdir()
+            self.neural_net_cache.mkdir(parents=True, exist_ok=True)
 
     def are_user_keys_in_cache(self, user_id: str):
         user_key_dir = self.key_cache / user_id
@@ -43,9 +43,12 @@ class FHEDataManager:
         analysis_dir = self.neural_net_cache / analysis_type
         return analysis_dir.exists()
 
-    def put_keys_into_cache(self, user_id:str, auto_key: str, mult_key: str, add_key: str, boot_key: str):
+    def put_keys_into_cache(self, user_id: str, auto_key: str, mult_key: str, add_key: str, boot_key: str):
         all_keys = [auto_key, mult_key, add_key, boot_key]
         user_key_dir = self.key_cache / user_id
+
+        # Ensure the user key directory exists
+        user_key_dir.mkdir(parents=True, exist_ok=True)
 
         # TODO add cache policy LRU or something else
 
