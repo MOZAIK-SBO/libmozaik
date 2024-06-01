@@ -21,8 +21,8 @@ namespace ckks_nn {
 
     NeuralNet::NeuralNet(const std::string& config_dir_path, const std::string& config_name) {
 
-        auto config_path = config_dir_path + config_name;
-
+        auto config_path = config_dir_path + "/" + config_name;
+        std::cout << config_path << std::endl;
         std::ifstream config_stream(config_path);
         json config = json::parse(config_stream);
 
@@ -56,8 +56,8 @@ namespace ckks_nn {
             m_biases[layer_idx].resize(cols);
 
             // paths to weight / bias matrices
-            std::string layer_weight_path = config_dir_path + current_layer_config["weight_path"].get<std::string>();
-            std::string layer_bias_path = config_dir_path + current_layer_config["bias_path"].get<std::string>();
+            std::string layer_weight_path = config_dir_path + "/"+ current_layer_config["weight_path"].get<std::string>();
+            std::string layer_bias_path = config_dir_path + "/" + current_layer_config["bias_path"].get<std::string>();
 
             read_weights(layer_weight_path, layer_idx);
             read_biases(layer_bias_path, layer_idx);
@@ -98,6 +98,7 @@ namespace ckks_nn {
 
 
     void NeuralNet::read_biases(std::string &bias_path, int_type layer) {
+        std::cout << bias_path << std::endl;
         std::ifstream bias_stream(bias_path);
 
         std::string line_buffer;
@@ -106,6 +107,7 @@ namespace ckks_nn {
 
         for(int_type col = 0; col < cols; col++) {
             std::getline(bias_stream, line_buffer);
+
             m_biases[layer][pos++] = std::stod(line_buffer);
         }
 

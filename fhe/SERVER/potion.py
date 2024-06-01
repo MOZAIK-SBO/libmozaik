@@ -15,12 +15,4 @@ def celery_init_app(app: Flask) -> Celery:
 
 def make_potion():
     app = Flask(__name__)
-    app.config.from_mapping(
-        CELERY=dict(
-            broker_url="redis://localhost",
-            result_backend="redis://localhost",
-            task_ignore_result=True,
-        ),
-    )
-    celery_app = celery_init_app(app)
-    return app, celery_app
+    return app

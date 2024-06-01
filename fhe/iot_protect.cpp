@@ -10,10 +10,17 @@
 #include "openfhe.h"
 #include "typedefs.h"
 
+#include "ciphertext-ser.h"
+#include "cryptocontext-ser.h"
+#include "key/key-ser.h"
+#include "scheme/ckksrns/ckksrns-ser.h"
+
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 using namespace lbcrypto;
 using namespace ckks_nn;
+
+
 
 const auto ser_type = SerType::JSON;
 

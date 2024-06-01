@@ -18,34 +18,60 @@ namespace ckks_nn {
 
 
         CryptoContext<DCRTPoly> m_cc;
+        uint32_t m_depth;
         KeyPair<DCRTPoly> m_key;
         int_type m_batch_size = 256;
-        int_type m_func_degree = 16;
         std::string m_config_dir = ".";
 
         explicit NeuralNetEvaluator() {
 
+            m_batch_size = 256;
+
             std::vector<int32_t> automorphism_indices;
             for(int32_t i = 1; i < m_batch_size; i++) {
+                automorphism_indices.push_back(i);
                 automorphism_indices.push_back(-i);
             }
 
             CCParams<CryptoContextCKKSRNS> cc_params;
-            cc_params.SetMultiplicativeDepth(100);
-            cc_params.SetScalingModSize(59);
-            cc_params.SetBatchSize(256);
+            cc_params.SetSecretKeyDist(SPARSE_TERNARY);
             cc_params.SetSecurityLevel(HEStd_NotSet);
-            cc_params.SetRingDim(512);
+            cc_params.SetRingDim(1 << 12);
+            cc_params.SetNumLargeDigits(3);
+            cc_params.SetBatchSize(m_batch_size);
+
+            std::vector<uint32_t> levelBudget = {5, 4};
+
+            int dcrtBits               = 59;
+            int firstMod               = 60; //45: 4.XX - 48: 7.84 - 51: 8.07:
+
+            cc_params.SetScalingModSize(dcrtBits);
+            cc_params.SetScalingTechnique(FLEXIBLEAUTOEXT);
+            cc_params.SetFirstModSize(firstMod);
+
+            uint32_t levelsAvailableAfterBootstrap = 20;
+            m_depth = levelsAvailableAfterBootstrap + FHECKKSRNS::GetBootstrapDepth(5 + 4, levelBudget, SPARSE_TERNARY);
+            cc_params.SetMultiplicativeDepth(m_depth);
 
             m_cc = GenCryptoContext(cc_params);
+
+
             m_cc->Enable(PKE);
             m_cc->Enable(LEVELEDSHE);
             m_cc->Enable(ADVANCEDSHE);
+            m_cc->Enable(FHE);
+
+            m_cc->EvalBootstrapSetup(levelBudget, {0,0}, m_batch_size);
+
             m_key = m_cc->KeyGen();
 
             m_cc->EvalMultKeyGen(m_key.secretKey);
             m_cc->EvalRotateKeyGen(m_key.secretKey, automorphism_indices);
             m_cc->EvalSumKeyGen(m_key.secretKey);
+            std::cout << "Finished writing sum keys" << std::endl;
+            m_cc->EvalBootstrapKeyGen(m_key.secretKey, m_batch_size);
+            std::cout << "Finished generation BS keys" << std::endl;
+
         }
 
         explicit NeuralNetEvaluator(const std::string& config_dir, const std::string& config_name = "crypto_config.json");
@@ -55,6 +81,10 @@ namespace ckks_nn {
         CKKSCiphertext eval_layer(const NeuralNet& nn, int_type layer_idx, CKKSCiphertext& vector);
 
         CKKSCiphertext eval_mat_mul(const NeuralNet& nn, int_type layer_idx, CKKSCiphertext& vector);
+
+        CKKSCiphertext eval_mat_mul_square(const NeuralNet& nn, int_type layer_idx, CKKSCiphertext& vector);
+
+        CKKSCiphertext eval_mat_mul_rect(const NeuralNet& nn, int_type layer_idx, CKKSCiphertext& vector);
 
         CKKSCiphertext
         eval_activation(const ckks_nn::NeuralNet &nn, int_type layer_idx, ckks_nn::CKKSCiphertext &vector);

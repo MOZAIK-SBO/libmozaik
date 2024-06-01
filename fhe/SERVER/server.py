@@ -1,27 +1,36 @@
-from typing import Dict, Tuple
+import json
+from typing import Dict, Tuple, List
 
 from celery import Celery, shared_task, chain
 from celery.result import AsyncResult, states
 
 from flask import request, Flask, jsonify
+from threading import Thread, RLock
+from concurrent.futures import ThreadPoolExecutor, Future
+
 from potion import make_potion
 from mozaik_obelisk import MozaikObelisk
 from config import ServerConfig, OBELISKSetup, FHEConfigFields
 
-import worker
+import subprocess
+from worker import FHEDataManager
 class FHEServer:
 
     def __init__(self, base_url, base_path, max_cache_size, max_workers):
         self.base_url = base_url
         self.max_workers = max_workers
         self.fhe_keys = FHEConfigFields
-        self.data_worker = worker.FHEDataManager(base_path=base_path, max_cache_size=max_cache_size)
-        self.mozaik_obelisk = MozaikObelisk(OBELISKSetup.OBELISK_BASE, OBELISKSetup.SERVER_ID, OBELISKSetup.SERVER_SECRET)
+        self.data_worker = FHEDataManager(base_path=base_path, max_cache_size=max_cache_size)
+        self.mozaik_obelisk = MozaikObelisk(OBELISKSetup.OBELISK_BASE.value, OBELISKSetup.SERVER_ID.value, OBELISKSetup.SERVER_SECRET.value)
+        self.current_thread = None
 
-        a,b = make_potion()
+        self.thread_status = dict()
+        self.thread_executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.thread_status_lock = RLock()
+
+        a = make_potion()
 
         self.flask_server: Flask = a
-        self.celery: Celery = b
 
     def setup(self):
 
@@ -40,55 +49,81 @@ class FHEServer:
                 return jsonify(
                     error=f"Error getting data from json POST request. Expecting analysis_id, user_id, data_index as an array, user_key and analysis_type. {e}"), 400
 
-            self.res = chain(
-                self.prepare_analysis.s(user_id, analysis_id,data_index),
-                self.perform_analysis.s(analysis_type),
-                self.finalize_analysis.s(user_id, analysis_id),
-                task_id=analysis_id
-            )()
-            print(self.celery.tasks) 
+            if not isinstance(data_index, list):
+                data_index = [data_index]
+
+            result_future = self.thread_executor.submit(self.perform_complete_analysis, analysis_type, analysis_id,
+                                                        user_id, data_index)
+            with self.thread_status_lock:
+                self.thread_status[analysis_id] = result_future
 
             return jsonify({"status": "Request added to the queue"}), 201
 
         @self.flask_server.route('/status/<analysis_id>', methods=['GET'])
         def get_analysis_status(analysis_id):
 
-            task = AsyncResult(analysis_id)
+            if analysis_id not in self.thread_status.keys():
+                return jsonify(type="UNKNOWN",error="Invalid analysis id"), 500
 
-            if task.state == states.PENDING:
-                return jsonify(type="QUEUING", details="The analysis was queued"), 200
-            elif task.state == states.SUCCESS:
-                return jsonify(type="COMPLETED", details="Sending data to Obelisk"), 200
-            elif task.state == states.STARTED:
-                return jsonify(type="STARTED"), 200
-            elif task.state == states.FAILURE:
-                return jsonify(type="FAILED", error=str(task)), 500
+            with self.thread_status_lock:
+
+                result_future: Future = self.thread_status[analysis_id]
+                if result_future.running():
+                    return jsonify(type="STARTED"), 200
+                elif result_future.cancelled():
+                    return jsonify(type="CANCELLED"), 500
+                elif result_future.done():
+                    return jsonify(type="COMPLETED", details="Sending data to Obelisk"), 200
+                return jsonify(type="UNKNOWN"), 500
+
+    def perform_complete_analysis(self, analysis_id: str, analysis_type: str, user_id: str, data_index: List):
+
+        user_in_cache, config_path = self.data_worker.get_user_keys_from_cache(user_id)
+
+        if not user_in_cache:
+
+            keys = self.mozaik_obelisk.get_keys(analysis_id=analysis_id)
+            self.data_worker.put_keys_into_cache(user_id, keys['automorphism_key'], keys['multiplication_key'], keys['addition_key'], keys['bootstrap_key'])
+            config_path = self.data_worker.generate_config(user_id, analysis_id)
+
+        ct_paths = []
+        data_index_to_request = []
+
+        # Check which ciphertexts are already present on disk
+        for i, datum_index in enumerate(data_index):
+            ct_in_cache, ct_path = self.data_worker.get_user_ct_from_cache(user_id, datum_index)
+            if not ct_in_cache:
+                data_index_to_request.append((i, datum_index))
             else:
-                return jsonify(type="FAILED", details="The querried ID is unknown"), 500
+                ct_paths.append((i, ct_path))
 
+        # request remaining ones
+        data_to_request = list(zip(*data_index_to_request)[0])
+        ct_data = self.mozaik_obelisk.get_data(analysis_id, user_id, data_to_request)
+        for (i, datum_index), ct_datum in zip(data_index_to_request, ct_data):
+            ct_path = self.data_worker.put_ct_into_dir(user_id,datum_index,ct_datum)
+            ct_paths.append((i, ct_path))
 
-    @classmethod
-    @shared_task(ignore_results=False,bind=True)
-    def prepare_analysis(self, user_id:str, analysis_id:str, data_index:list):
-        keys = MozaikObelisk.get_keys(analysis_id)
-        worker.FHEDataManager.put_keys_into_cache(user_id, keys['automorphism_key'], keys['multiplication_key'], keys['addition_key'], keys['bootstrap_key'])
-        return MozaikObelisk.get_data(analysis_id, user_id, data_index)
+        ct_paths = sorted(ct_paths, key=lambda x: x[0])
 
+        for i, ct_path in ct_paths:
 
-    @classmethod
-    @shared_task(ignore_results=False,bind=True)
-    def perform_analysis(self, analysis_type:str, ct_data:str):
-        aut_key = self.fhe_keys.AUTOMORPHISM_KEY
-        # Check the ct_data for correct format
-        # if analysis_type == "Heartbeat-Demo-1"
-        # Run inference
-        # return output ct
-        return 'output'
+            if analysis_type == "Heartbeat-Demo-1":
+                inference_binary_path = self.data_worker.base_path / "run_network_server"
+                # res = subprocess.Popen([str(inference_binary_path), config_path, ct_path])
+                res = subprocess.check_output(["/usr/bin/touch", ct_path + ".out"])
+                if self.data_worker.encoding == "JSON":
+                    ct_out_data = open(ct_path + ".out","r").read()
+                else:
+                    ct_out_data = self.data_worker.encode_from_raw(open(ct_path + ".out","rb").read())
+            else:
+                ct_out_data = ""
 
-    @classmethod
-    @shared_task(ignore_results=False,bind=True)
-    def finalize_analysis(self, user_id:str, analysis_id:str, result_ct: str):
-        MozaikObelisk.store_result(analysis_id, user_id, result_ct)
+            self.mozaik_obelisk.store_result(analysis_id, user_id, ct_out_data)
+
+        with self.thread_status_lock:
+            del self.thread_status[analysis_id]
+
         return "good"
 
     def run(self, host, port):

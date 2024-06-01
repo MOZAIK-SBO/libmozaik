@@ -22,6 +22,8 @@ namespace ckks_nn {
         return weight_row;
     }
 
+
+
     std::vector<double> NeuralNet::get_weight_col(ckks_nn::int_type layer, ckks_nn::int_type col) const {
         auto n_cols = m_weight_dims[layer].second;
         auto n_rows = m_weight_dims[layer].first;
@@ -32,6 +34,29 @@ namespace ckks_nn {
         }
 
         return weight_col;
+    }
+
+    std::vector<double> NeuralNet::get_diag_row(ckks_nn::int_type layer, ckks_nn::int_type offset) const {
+        auto dims = get_weight_dim(layer);
+        auto rows = dims.first;
+        auto cols = dims.second;
+        std::vector<double> result(cols, 0);
+        for(int_type i = 0; i < cols; i++) {
+            result[i] = get_weight(layer, (i + offset) % rows, i);
+        }
+        return result;
+    }
+
+    std::vector<double> NeuralNet::get_diag_col(ckks_nn::int_type layer, ckks_nn::int_type offset) const {
+        auto dims = get_weight_dim(layer);
+        auto rows = dims.first;
+        auto cols = dims.second;
+
+        std::vector<double> result(rows, 0);
+        for(int_type i = 0; i < rows; i++) {
+            result[i] = get_weight(layer, i, (i + offset) % cols);
+        }
+        return result;
     }
 
     NeuralNet::Activation NeuralNet::get_activation(ckks_nn::int_type layer) const {

@@ -45,6 +45,7 @@ int main(int argc, char* argv[]) {
     std::string key_dir_string = argv[1];
     auto key_dir = fs::path(key_dir_string);
     std::string nn_config = argv[2];
+    auto nn_config_path_abs = absolute(fs::path(nn_config));
 
     if (fs::exists(key_dir)) {
         std::cerr << "Key dir already exists. Exiting..." << std::endl;
@@ -63,8 +64,8 @@ int main(int argc, char* argv[]) {
     CCParams<CryptoContextCKKSRNS> cc_params;
 
     // Hardcode for now
-    cc_params.SetMultiplicativeDepth(60);
-    cc_params.SetScalingModSize(59);
+    cc_params.SetMultiplicativeDepth(10);
+    cc_params.SetScalingModSize(50);
     cc_params.SetBatchSize(256);
     cc_params.SetSecurityLevel(HEStd_NotSet);
     cc_params.SetRingDim(512);
@@ -73,6 +74,7 @@ int main(int argc, char* argv[]) {
     cc->Enable(PKE);
     cc->Enable(LEVELEDSHE);
     cc->Enable(ADVANCEDSHE);
+    cc->Enable(FHE);
     auto key = cc->KeyGen();
 
     cc->EvalMultKeyGen(key.secretKey);
@@ -135,15 +137,32 @@ int main(int argc, char* argv[]) {
         std::exit(1);
     }
 
+    cc->Ser
+
+    std::ofstream bootKeyFile(key_dir / BOOT_STRING, std::ios::out | std::ios::binary);
+    if (bootKeyFile.is_open()) {
+        if (!cc->Serialize(sumKeyFile, ser_type)) {
+            std::cerr << "Error writing sum keys" << std::endl;
+            std::exit(1);
+        }
+        sumKeyFile.close();
+    }
+    else {
+        std::cerr << "Error serializing sum keys" << std::endl;
+        std::exit(1);
+    }
+
     //// Write JSON config
     json crypto_context;
-    crypto_context[CC_STRING] = "./" + CC_STRING;
-    crypto_context[AUTO_STRING] = "./" + AUTO_STRING;
-    crypto_context[SUM_STRING] = "./" + SUM_STRING;
-    crypto_context[MULT_STRING] = "./" + MULT_STRING;
-    crypto_context[PUB_STRING] = "./" + PUB_STRING;
-    crypto_context[SK_STRING] = "./" + SK_STRING;
-    crypto_context[NN_STRING] = nn_config;
+
+    auto all_strings = {CC_STRING, AUTO_STRING, SUM_STRING, PUB_STRING, SK_STRING, MULT_STRING};
+    for (auto& str : all_strings) {
+        auto path = key_dir / str;
+        auto path_abs_str = absolute(path).string();
+        crypto_context[str] = path_abs_str;
+    }
+
+    crypto_context[NN_STRING] = nn_config_path_abs.string();
 
     std::ofstream out(key_dir / "crypto_config.json");
     if (out.is_open()) {

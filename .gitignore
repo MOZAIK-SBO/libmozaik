@@ -2,3 +2,4 @@
 fhe/openfhe
 fhe/assets/dependencies/openfhe/
 fhe/cmake-build-*
+/fhe/build2/
