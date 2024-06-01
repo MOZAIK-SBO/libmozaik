@@ -51,12 +51,11 @@ namespace ckks_nn {
 
     // End cursed
     CKKSCiphertext NeuralNetEvaluator::eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input) {
-        std::cout << 0 << std::endl;
+        std::cout << "Layer... 0" << std::endl;
         auto layer_i_out = eval_layer(nn, 0, input);
 
-
         for(int_type i=1; i < nn.get_n_layers(); i++) {
-            std::cout << i << std::endl;
+            std::cout << "Layer..." << i << std::endl;
             layer_i_out = eval_layer(nn, i, layer_i_out);
         }
 
@@ -67,42 +66,30 @@ namespace ckks_nn {
                                                   ckks_nn::CKKSCiphertext &vector) {
 
         CKKSCiphertext tmp = eval_mat_mul(nn, layer_idx, vector);
-        std::cout << "L_out matmul " << vector->GetLevel() << std::endl;
-
 
         // add bias
         auto bias_vec = nn.get_bias_vector(layer_idx);
         auto bias_encoded = m_cc->MakeCKKSPackedPlaintext(bias_vec);
-        //m_cc->EvalAddInPlace(tmp, bias_encoded);
+        m_cc->EvalAddInPlace(tmp, bias_encoded);
 
-        //auto act_res = eval_activation(nn, layer_idx, tmp);
+        auto act_res = eval_activation(nn, layer_idx, tmp);
         //std::cout << "L_out activation " << act_res->GetLevel() << std::endl;
-        return tmp->Clone();//m_cc->EvalBootstrap(act_res,2,13);
+        return act_res;// m_cc->EvalBootstrap(act_res,2,13);
     }
 
     CKKSCiphertext NeuralNetEvaluator::eval_mat_mul(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                           ckks_nn::CKKSCiphertext &vector) {
-        auto dim = nn.get_weight_dim(layer_idx);
+        // auto dim = nn.get_weight_dim(layer_idx);
 
+        return eval_mat_mul_rect(nn, layer_idx, vector);
+
+        /*
         if (dim.first == dim.second) {
             return eval_mat_mul_square(nn, layer_idx, vector);
-        }
+        } else {
+            return eval_mat_mul_rect(nn, layer_idx, vector);
+        } */
 
-
-        auto cols = dim.second;
-
-        //std::vector<double> row(m_batch_size);
-        std::vector<CKKSCiphertext> temp_results;
-        for(int_type i = 0; i < cols; i++) {
-            std::cout << i << " " << std::flush;
-            auto row_i = nn.get_weight_col(layer_idx, i);
-            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(row_i);
-            auto inner_prod = m_cc->EvalInnerProduct(vector, row_ptx, m_batch_size);
-            temp_results.push_back(inner_prod);
-        }
-        std::cout << std::endl;
-
-        return m_cc->EvalMerge(temp_results);
     }
 
     CKKSCiphertext NeuralNetEvaluator::eval_mat_mul_square(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
@@ -110,19 +97,39 @@ namespace ckks_nn {
         auto dims = nn.get_weight_dim(layer_idx);
         auto dim = dims.first;
 
-        std::vector<CKKSCiphertext> temp_results;
-        for(int32_t i = 0; i < dim; i++) {
-            std::cout << i << std::endl;
+        assert(2 * dim < m_batch_size);
+        /* First, we need to mirror the coefficients s.t. we can perform cyclic rotations */
+        // Step 1 masking
+        std::vector<double> mask(m_batch_size, 0);
+        std::fill(mask.begin(), mask.begin() + dim, 1);
+        auto mask_ptx = m_cc->MakeCKKSPackedPlaintext(mask);
+        auto vector_mask = m_cc->EvalMult(vector, mask_ptx);
+        // Step 2 mirror
+        auto vector_mirror =  m_cc->EvalAdd(vector_mask, m_cc->EvalRotate(vector_mask, -dim));
+
+        auto row_0 = nn.get_diag_col(layer_idx, 0);
+        auto row_0_ptx = m_cc->MakeCKKSPackedPlaintext(row_0);
+        auto acc = m_cc->EvalMult(vector_mirror, row_0_ptx);
+
+
+        // Add correct coefficients in correct slots.
+        for(int32_t i = 1; i < dim; i++) {
+            std::vector<double> coefs(m_batch_size, 0);
+
             auto row_i = nn.get_diag_col(layer_idx, i);
-            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(row_i);
-            if (i > 0) {
-                auto rot_vec = m_cc->EvalRotate(vector, -i);
-                temp_results.push_back(m_cc->EvalMult(rot_vec, row_ptx));
-            } else {
-                temp_results.push_back(m_cc->EvalMult(vector, row_ptx));
-            }
+            // std::cout << i << " " << row_i[0] << std::flush;
+            std::copy(row_i.begin(), row_i.end(), coefs.begin());
+            std::copy(row_i.begin(), row_i.begin() + dim, coefs.begin() + dim);
+
+            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(coefs);
+            auto mul_res = m_cc->EvalMult(vector_mirror, row_ptx);
+
+            auto rot_vec = m_cc->EvalRotate(mul_res, (dim - i)%dim);
+
+            m_cc->EvalAddInPlace(acc, rot_vec);
         }
-        return m_cc->EvalAddManyInPlace(temp_results);
+
+        return acc->Clone();
     }
 
     CKKSCiphertext  NeuralNetEvaluator::eval_mat_mul_rect(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
@@ -130,46 +137,79 @@ namespace ckks_nn {
         auto dims = nn.get_weight_dim(layer_idx);
         auto rows = dims.first;
         auto cols = dims.second;
-        assert(cols < rows);
+        assert(cols <= rows);
 
-        auto padded_length = cols * (rows / cols + 1);
-        std::vector<double> full_vec(m_batch_size, 0);
 
-        // TODO, for now we assume cols < rows
-        std::vector<CKKSCiphertext> temp_results;
-        for(int32_t idx = 0; idx < cols; idx++) {
-            std::fill(full_vec.begin(), full_vec.end(), 0.0);
-            auto row_i = nn.get_diag_col(layer_idx, idx);
-            std::copy(row_i.begin(), row_i.end(), full_vec.begin());
-            auto tmp_ct = vector->Clone();
-            for(int_type offset = 0; offset < padded_length; offset+=cols) {
-                std::vector<double> masked_vector(m_batch_size, 0);
-                std::copy(masked_vector.begin() + offset, masked_vector.begin() + (offset + cols), masked_vector.begin());
+        int32_t rat = rows % cols == 0 ? rows / cols : rows / cols + 1;
+        int32_t padded_length = rat * cols;
+        assert((cols + padded_length) <= m_batch_size);
 
+        // std::cout << rat << " " << padded_length << std::endl;
+
+        /* First, we need to mirror the coefficients s.t. we can perform cyclic rotations */
+        // Step 1 masking
+        std::vector<double> mask_rows(m_batch_size, 0);
+        std::fill(mask_rows.begin(), mask_rows.begin() + rows, 1);
+
+        std::vector<double> mask_cols(m_batch_size, 0);
+        std::fill(mask_cols.begin(), mask_cols.begin() + cols, 1);
+
+        auto mask_row_ptx = m_cc->MakeCKKSPackedPlaintext(mask_rows);
+        auto mask_col_ptx = m_cc->MakeCKKSPackedPlaintext(mask_cols);
+
+        auto vector_upto_rows = m_cc->EvalMult(vector, mask_row_ptx);
+        auto vector_upto_cols = m_cc->EvalMult(vector, mask_col_ptx);
+
+        auto vector_upto_cols_rot = m_cc->EvalRotate(vector_upto_cols, -padded_length);
+        auto vector_mirror = m_cc->EvalAdd(vector_upto_rows, vector_upto_cols_rot);
+
+        //std::cout << "Masking done" << std::endl;
+        auto row_0 = nn.get_diag_col(layer_idx, 0);
+        auto row_0_ptx = m_cc->MakeCKKSPackedPlaintext(row_0);
+        auto acc = m_cc->EvalMult(vector_mirror, row_0_ptx);
+
+
+        // Add correct coefficients in correct slots.
+        for(int32_t i = 1; i < cols; i++) {
+            std::vector<double> coefs(m_batch_size, 0);
+
+            auto row_i = nn.get_diag_col(layer_idx, i);
+            // std::cout << i << " " << row_i[0] << std::flush;
+            std::copy(row_i.begin(), row_i.end(), coefs.begin());
+            std::copy(row_i.begin(), row_i.begin() + cols, coefs.begin() + padded_length);
+
+            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(coefs);
+            auto mul_res = m_cc->EvalMult(vector_mirror, row_ptx);
+
+            auto rot_vec = m_cc->EvalRotate(mul_res, (cols - i)%cols);
+
+            m_cc->EvalAddInPlace(acc, rot_vec);
+        }
+        // final correction, as the chunks of size \cols need to be added
+        uint32_t rat_u = std::abs(rat);
+
+        // check whether ratio of (extended) rows to cols is power of 2, in which case the reduction is trivial
+        if ((rat_u & (rat_u - 1)) == 0) {
+            for (int32_t i = padded_length / 2; i >= cols; i /= 2) {
+                auto tmp = m_cc->EvalRotate(acc, i);
+                m_cc->EvalAddInPlace(acc, tmp);
+            }
+        } else {
+            std::vector<double> cleanup_mask(m_batch_size, 0);
+            std::fill(cleanup_mask.begin(), cleanup_mask.begin() + padded_length, 1);
+            auto cleanup = m_cc->MakeCKKSPackedPlaintext(cleanup_mask);
+            acc = m_cc->EvalMult(acc, cleanup);
+            int32_t pow2rat = 1;
+            do {
+                pow2rat *= 2;
+            } while (pow2rat < rat);
+            for (int32_t i = cols * pow2rat / 2; i >= cols; i /= 2) {
+                auto tmp = m_cc->EvalRotate(acc, i);
+                m_cc->EvalAddInPlace(acc, tmp);
             }
         }
-
-
-        for(int_type offset = 0; offset < padded_length; offset+=cols) {
-            auto idx = offset / cols;
-
-
-
-
-
-            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(full_vec);
-            temp_results.push_back(m_cc->EvalMult(vector, row_ptx));
-        }
-        auto pre_rot_ct = m_cc->EvalAddManyInPlace(temp_results);
-        /*
-        // gives the closest multiple of rows to cols
-        int32_t first_rot = padded_length / 2;
-        for(int32_t i = first_rot; i >= rows; i >>= 2) {
-            std::cout << i << std::endl;
-            auto swapped = m_cc->EvalRotate(pre_rot_ct, -i);
-            m_cc->EvalAddInPlace(pre_rot_ct, swapped);
-        } */
-        return pre_rot_ct->Clone();
+        // std::cout << "yep" << std::endl;
+        return acc->Clone();
     }
 
     CKKSCiphertext
