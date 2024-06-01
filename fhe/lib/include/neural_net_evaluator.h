@@ -35,8 +35,9 @@ namespace ckks_nn {
 
             CCParams<CryptoContextCKKSRNS> cc_params;
             cc_params.SetSecretKeyDist(SPARSE_TERNARY);
-            cc_params.SetSecurityLevel(HEStd_NotSet);
-            cc_params.SetRingDim(1 << 12);
+            cc_params.SetRingDim(1 << 13);
+            cc_params.SetSecurityLevel(HEStd_128_classic);
+
             cc_params.SetNumLargeDigits(3);
             cc_params.SetBatchSize(m_batch_size);
 
@@ -49,8 +50,9 @@ namespace ckks_nn {
             cc_params.SetScalingTechnique(FLEXIBLEAUTOEXT);
             cc_params.SetFirstModSize(firstMod);
 
-            uint32_t levelsAvailableAfterBootstrap = 20;
-            m_depth = levelsAvailableAfterBootstrap + FHECKKSRNS::GetBootstrapDepth(5 + 4, levelBudget, SPARSE_TERNARY);
+            uint32_t levelsAvailableAfterBootstrap = 15;
+            m_depth = levelsAvailableAfterBootstrap + FHECKKSRNS::GetBootstrapDepth(levelBudget, SPARSE_TERNARY);
+            std::cout << m_depth << std::endl;
             cc_params.SetMultiplicativeDepth(m_depth);
 
             m_cc = GenCryptoContext(cc_params);
@@ -61,7 +63,7 @@ namespace ckks_nn {
             m_cc->Enable(ADVANCEDSHE);
             m_cc->Enable(FHE);
 
-            m_cc->EvalBootstrapSetup(levelBudget, {0,0}, m_batch_size);
+            //m_cc->EvalBootstrapSetup(levelBudget, {0,0}, m_batch_size);
 
             m_key = m_cc->KeyGen();
 
@@ -69,7 +71,7 @@ namespace ckks_nn {
             m_cc->EvalRotateKeyGen(m_key.secretKey, automorphism_indices);
             m_cc->EvalSumKeyGen(m_key.secretKey);
             std::cout << "Finished writing sum keys" << std::endl;
-            m_cc->EvalBootstrapKeyGen(m_key.secretKey, m_batch_size);
+            //m_cc->EvalBootstrapKeyGen(m_key.secretKey, m_batch_size);
             std::cout << "Finished generation BS keys" << std::endl;
 
         }
