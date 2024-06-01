@@ -9,11 +9,16 @@
 
 #include "cryptocontext-ser.h"
 #include "key/key-ser.h"
+#include "ciphertext-ser.h"
+#include "scheme/ckksrns/ckksrns-ser.h"
+
 
 #include <filesystem>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+const auto ser_type = lbcrypto::SerType::JSON;
 
 namespace ckks_nn {
     // Begin cursed
@@ -46,43 +51,125 @@ namespace ckks_nn {
 
     // End cursed
     CKKSCiphertext NeuralNetEvaluator::eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input) {
+        std::cout << 0 << std::endl;
         auto layer_i_out = eval_layer(nn, 0, input);
+
+
         for(int_type i=1; i < nn.get_n_layers(); i++) {
+            std::cout << i << std::endl;
             layer_i_out = eval_layer(nn, i, layer_i_out);
         }
 
-        return layer_i_out;
+        return layer_i_out->Clone();
     }
 
     CKKSCiphertext NeuralNetEvaluator::eval_layer(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                   ckks_nn::CKKSCiphertext &vector) {
 
         CKKSCiphertext tmp = eval_mat_mul(nn, layer_idx, vector);
+        std::cout << "L_out matmul " << vector->GetLevel() << std::endl;
+
 
         // add bias
         auto bias_vec = nn.get_bias_vector(layer_idx);
         auto bias_encoded = m_cc->MakeCKKSPackedPlaintext(bias_vec);
-        m_cc->EvalAddInPlace(tmp, bias_encoded);
-        return eval_activation(nn, layer_idx, tmp);
+        //m_cc->EvalAddInPlace(tmp, bias_encoded);
 
+        //auto act_res = eval_activation(nn, layer_idx, tmp);
+        //std::cout << "L_out activation " << act_res->GetLevel() << std::endl;
+        return tmp->Clone();//m_cc->EvalBootstrap(act_res,2,13);
     }
 
     CKKSCiphertext NeuralNetEvaluator::eval_mat_mul(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                           ckks_nn::CKKSCiphertext &vector) {
         auto dim = nn.get_weight_dim(layer_idx);
+
+        if (dim.first == dim.second) {
+            return eval_mat_mul_square(nn, layer_idx, vector);
+        }
+
+
         auto cols = dim.second;
 
         //std::vector<double> row(m_batch_size);
         std::vector<CKKSCiphertext> temp_results;
         for(int_type i = 0; i < cols; i++) {
+            std::cout << i << " " << std::flush;
             auto row_i = nn.get_weight_col(layer_idx, i);
             auto row_ptx = m_cc->MakeCKKSPackedPlaintext(row_i);
-
             auto inner_prod = m_cc->EvalInnerProduct(vector, row_ptx, m_batch_size);
             temp_results.push_back(inner_prod);
         }
+        std::cout << std::endl;
 
         return m_cc->EvalMerge(temp_results);
+    }
+
+    CKKSCiphertext NeuralNetEvaluator::eval_mat_mul_square(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
+                                                           ckks_nn::CKKSCiphertext &vector) {
+        auto dims = nn.get_weight_dim(layer_idx);
+        auto dim = dims.first;
+
+        std::vector<CKKSCiphertext> temp_results;
+        for(int32_t i = 0; i < dim; i++) {
+            std::cout << i << std::endl;
+            auto row_i = nn.get_diag_col(layer_idx, i);
+            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(row_i);
+            if (i > 0) {
+                auto rot_vec = m_cc->EvalRotate(vector, -i);
+                temp_results.push_back(m_cc->EvalMult(rot_vec, row_ptx));
+            } else {
+                temp_results.push_back(m_cc->EvalMult(vector, row_ptx));
+            }
+        }
+        return m_cc->EvalAddManyInPlace(temp_results);
+    }
+
+    CKKSCiphertext  NeuralNetEvaluator::eval_mat_mul_rect(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
+                                                          ckks_nn::CKKSCiphertext &vector) {
+        auto dims = nn.get_weight_dim(layer_idx);
+        auto rows = dims.first;
+        auto cols = dims.second;
+        assert(cols < rows);
+
+        auto padded_length = cols * (rows / cols + 1);
+        std::vector<double> full_vec(m_batch_size, 0);
+
+        // TODO, for now we assume cols < rows
+        std::vector<CKKSCiphertext> temp_results;
+        for(int32_t idx = 0; idx < cols; idx++) {
+            std::fill(full_vec.begin(), full_vec.end(), 0.0);
+            auto row_i = nn.get_diag_col(layer_idx, idx);
+            std::copy(row_i.begin(), row_i.end(), full_vec.begin());
+            auto tmp_ct = vector->Clone();
+            for(int_type offset = 0; offset < padded_length; offset+=cols) {
+                std::vector<double> masked_vector(m_batch_size, 0);
+                std::copy(masked_vector.begin() + offset, masked_vector.begin() + (offset + cols), masked_vector.begin());
+
+            }
+        }
+
+
+        for(int_type offset = 0; offset < padded_length; offset+=cols) {
+            auto idx = offset / cols;
+
+
+
+
+
+            auto row_ptx = m_cc->MakeCKKSPackedPlaintext(full_vec);
+            temp_results.push_back(m_cc->EvalMult(vector, row_ptx));
+        }
+        auto pre_rot_ct = m_cc->EvalAddManyInPlace(temp_results);
+        /*
+        // gives the closest multiple of rows to cols
+        int32_t first_rot = padded_length / 2;
+        for(int32_t i = first_rot; i >= rows; i >>= 2) {
+            std::cout << i << std::endl;
+            auto swapped = m_cc->EvalRotate(pre_rot_ct, -i);
+            m_cc->EvalAddInPlace(pre_rot_ct, swapped);
+        } */
+        return pre_rot_ct->Clone();
     }
 
     CKKSCiphertext
@@ -97,18 +184,11 @@ namespace ckks_nn {
         switch (activation) {
             case NeuralNet::Activation::RELU: {
 
-                // we compute relu via RELU(x) = (x + |x|) / 2 since
-                // absolute value is easier to approximate via polynomials due to symmetry and asymptotics
-                // for x -> +- inf: lim |x| = lim x^n + p(x), n = 0 mod 2, deg p < n
                 auto func = [](double x) -> double { return x > 0 ? x : -x;};
+                std::cout << lb << ub << std::endl;
+                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 32);
 
-
-                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 256);
-                m_cc->EvalAddInPlace(tmp, vector);
-                std::vector<double> d2(m_batch_size, 0.5);
-                auto pt = m_cc->MakeCKKSPackedPlaintext(d2);
-
-                return m_cc->EvalMult(tmp, pt);
+                return m_cc->EvalAdd(vector, tmp);
             }
             case NeuralNet::Activation::SOFTMAX_LINEAR: {
 
@@ -149,6 +229,8 @@ namespace ckks_nn {
                 return m_cc->EvalAdd(merged, encoded_F_0);
             }
             case NeuralNet::Activation::SOFTMAX: {
+                return vector;
+                /*
                 // NOTE We compute log-softmax for better stability
                 double shift = (lb + ub) / 2;
                 // input is between -shift, shift now
@@ -170,7 +252,7 @@ namespace ckks_nn {
                 auto log_F = [](double x) {return std::log(x); };
                 auto sum_exp_norm_log = m_cc->EvalChebyshevFunction(log_F, sum_exp_norm, 5 * std::exp(1), 5 * std::exp(3), 2000);
 
-                return m_cc->EvalSub(normalized, sum_exp_norm_log);
+                return m_cc->EvalSub(normalized, sum_exp_norm_log); */
             }
 
             default: break;
@@ -179,21 +261,26 @@ namespace ckks_nn {
     }
 
     NeuralNet NeuralNetEvaluator::build_nn_from_crypto_config(const std::string& config_dir_path, const std::string& config_name) {
-        auto config_path = config_dir_path + config_name;
+        auto config_path = config_dir_path + "/" + config_name;
 
         std::ifstream config_stream(config_path);
         json config = json::parse(config_stream);
 
-        // TODO error handling
-        std::string nn_path = config[NN_STRING];
 
-        return NeuralNet(config_dir_path, nn_path);
+        std::string nn_path_str = config[NN_STRING];
+        auto nn_path = fs::path(nn_path_str);
+        auto nn_dir = nn_path.parent_path().string();
+        auto nn_config = nn_path.filename().string();
+
+
+        return NeuralNet(nn_dir, nn_config);
     }
 
     NeuralNetEvaluator::NeuralNetEvaluator(const std::string& config_dir_path, const std::string& config_name) {
         m_config_dir = config_dir_path;
         auto config_dir = fs::path(config_dir_path);
         auto config_path = config_dir / config_name;
+
         std::ifstream config_stream(config_path);
         json config = json::parse(config_stream);
 
@@ -203,7 +290,8 @@ namespace ckks_nn {
 
         std::string cc_path = config[CC_STRING];
 
-        if (!Serial::DeserializeFromFile(config_path, m_cc, SerType::BINARY)) {
+        std::cout << cc_path << std::endl;
+        if (!Serial::DeserializeFromFile(cc_path, m_cc, ser_type)) {
             std::cerr << "I cannot read serialized data from: " << config_dir_path << cc_path << std::endl;
             std::exit(1);
         }
@@ -234,17 +322,15 @@ namespace ckks_nn {
             std::exit(1);
         }
 
-        m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, SerType::BINARY);
-        m_cc->DeserializeEvalMultKey(mult_key_istream, SerType::BINARY);
-        m_cc->DeserializeEvalSumKey(auto_key_istream, SerType::BINARY);
-
-        // TODO maybe deserialize public key ? Not needed but who knows...
+        std::cout << m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, ser_type) << std::endl;
+        std::cout << m_cc->DeserializeEvalMultKey(mult_key_istream, ser_type) << std::endl;
+        std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
     }
 
     CKKSCiphertext NeuralNetEvaluator::load_ciphertext_from_file(const std::string &ct_path) {
         CKKSCiphertext ct;
 
-        if (!Serial::DeserializeFromFile(ct_path, ct, SerType::BINARY)) {
+        if (!Serial::DeserializeFromFile(ct_path, ct, ser_type)) {
             std::cerr << "Cannot read serialization from " << ct_path << std::endl;
             std::exit(1);
         }
@@ -259,7 +345,7 @@ namespace ckks_nn {
             std::exit(-1);
         }
 
-        if (!Serial::SerializeToFile(path, ct, SerType::BINARY)) {
+        if (!Serial::SerializeToFile(path, ct, ser_type)) {
             std::cerr << " Error writing ciphertext 2" << std::endl;
         }
     }

@@ -30,6 +30,10 @@ namespace ckks_nn {
 
         std::vector<double> get_weight_col(int_type layer, int_type col) const;
 
+        std::vector<double> get_diag_row(int_type layer, int_type offset) const;
+
+        std::vector<double> get_diag_col(int_type layer, int_type offset) const;
+
         double get_bias(int_type layer, int_type row) const;
 
         std::vector<double> get_bias_vector(int_type layer) const;

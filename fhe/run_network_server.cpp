@@ -9,12 +9,17 @@
 #include "neural_net_evaluator.h"
 #include "neural_net.h"
 
+#include "ciphertext-ser.h"
+#include "cryptocontext-ser.h"
+#include "key/key-ser.h"
+#include "scheme/ckksrns/ckksrns-ser.h"
+
 namespace fs = std::filesystem;
 using namespace ckks_nn;
 
 int main(int argc, char* argv[]) {
 
-    if (argc < 2) {
+    if (argc < 3) {
         std::cerr << "Usage: ./main_server [FHE_KEY_DIR || CRYPTO_CONFIG_PATH ] [CIPHERTEXT_FILE] [RESULT_FILE]" << std::endl;
         std::cerr << "If [RESULT_FILE] is not specified, we set [RESULT_FILE] = [CIPHERTEXT_FILE].out" << std::endl;
         std::cerr << "Example: ./main_server assets/configs/default ct1 ct1_result" << std::endl;

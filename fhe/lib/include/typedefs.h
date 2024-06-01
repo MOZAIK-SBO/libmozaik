@@ -18,7 +18,8 @@ namespace ckks_nn {
     const std::string SK_STRING = "secret_key";
     const std::string AUTO_STRING ="automorphism_key";
     const std::string SUM_STRING = "sum_key";
-    const std::string MULT_STRING = "mult_key";
+    const std::string MULT_STRING = "multiplication_key";
+    const std::string BOOT_STRING = "bootstrap_key";
     const std::string NN_STRING = "neural_network_config";
 
 }

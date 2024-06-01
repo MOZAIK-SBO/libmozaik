@@ -121,7 +121,7 @@ class MozaikObelisk:
             # Raise an exception if the request encountered an exception
             raise requests.RequestException(f"Request encountered an exception: {e}")
         
-    def get_keys(self, analysis_id):
+    def get_keys(self, analysis_id: str):
         """
         Get user fhe keys from the Mozaik Obelisk. 
 
@@ -155,12 +155,16 @@ class MozaikObelisk:
 
                 # Switch them to correct format if needed
                 for key in keys:
+                    if isinstance(keys[key], bytes):
+                        keys[key] = keys[key].decode("utf-8")
+                    """
                     if isinstance(keys[key], str):
                         # If key_share is a string, assume it's a hexadecimal representation and convert to bytes
                         keys[key] = bytes.fromhex(keys[key])
                     elif not isinstance(keys[key], bytes):
                         # If key_share is not bytes or a string, raise an error
                         return "Error", f"ValueError: key_share obtained in wrong format: {type(keys[key])}"
+                    """
                 
                 return keys
             else:
@@ -171,7 +175,7 @@ class MozaikObelisk:
             raise requests.RequestException(f"Request encountered an exception: {e}")
         
 
-    def store_result(self, analysis_id, user_id, result):
+    def store_result(self, analysis_id, user_id, result,*args):
         """
         POST method to store result in the Mozaik Obelisk service.
 

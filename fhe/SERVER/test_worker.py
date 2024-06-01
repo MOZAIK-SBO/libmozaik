@@ -18,7 +18,7 @@ class TestFHEDataManager(unittest.TestCase):
 
     def test_are_user_keys_in_cache(self):
         # Initially, it should return False because no keys are cached
-        self.assertFalse(self.manager.are_user_keys_in_cache("user123")[0])
+        self.assertFalse(self.manager.get_user_keys_from_cache("user123")[0])
 
         # Simulate putting keys in cache
         user_key_dir = Path(self.temp_dir) / 'cache' / 'keys' / 'user123'
@@ -30,7 +30,7 @@ class TestFHEDataManager(unittest.TestCase):
         (user_key_dir / 'crypto_config.json').touch()
 
         # Now, it should return True because the keys are cached
-        self.assertTrue(self.manager.are_user_keys_in_cache("user123")[0])
+        self.assertTrue(self.manager.get_user_keys_from_cache("user123")[0])
 
     def test_put_keys_into_cache(self):
         auto_key = urlsafe_b64encode(b"auto_key_data").decode('utf-8')

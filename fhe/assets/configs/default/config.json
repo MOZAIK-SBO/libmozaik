@@ -6,7 +6,7 @@
       "dims" : [ 187, 50],
       "weight_path": "weights_0_relu.txt",
       "bias_path": "biases_0_relu.txt",
-      "bounds": [-2, 2],
+      "bounds": [-3, 3],
       "activation": "relu"
     },
     {
