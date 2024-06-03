@@ -12,7 +12,7 @@ class FHEDataManager:
     model_cache_name = "models"
     expected_keys = ["automorphism_key","multiplication_key","crypto_context"]
 
-    def __init__(self, base_path="./", max_cache_size=10, encoding="JSON"):
+    def __init__(self, base_path="./", max_cache_size=10, encoding="BINARY"):
         self.base_path = Path(base_path)
         assert self.base_path.exists()
 
@@ -20,8 +20,9 @@ class FHEDataManager:
         self.key_cache = self.base_path / "cache" / self.key_cache_name
         self.neural_net_cache = self.base_path / "cache" / self.model_cache_name
         self.max_cache_size = max_cache_size
-        self.ciphertext_dir = self.base_path / "ct"
-        self.encoding = encoding
+        self.ciphertext_dir = self.base_path / "cache" / "ct"
+        self.input_encoding = encoding
+        self.output_encoding = "JSON"
 
         if not self.key_cache.exists():
             self.key_cache.mkdir(parents=True, exist_ok=True)
@@ -55,7 +56,7 @@ class FHEDataManager:
         # Transform keys back to bytes
         for name, key in zip(self.expected_keys, all_keys):
             key_file = user_key_dir / name
-            if self.encoding != "JSON":
+            if self.input_encoding != "JSON":
                 key_raw = self.decode_to_raw(key)
                 with key_file.open("wb") as F:
                     F.write(key_raw)
@@ -86,7 +87,7 @@ class FHEDataManager:
 
         if user_ct_dir.exists() and user_ct_dir.is_dir():
             ct_path = user_ct_dir / ct_name
-            if self.encoding != "JSON":
+            if self.input_encoding != "JSON":
                 with ct_path.open("wb") as F:
                     ct_content_raw = self.decode_to_raw(ct_content)
                     F.write(ct_content_raw)
