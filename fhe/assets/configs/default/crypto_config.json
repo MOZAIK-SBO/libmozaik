@@ -1,5 +1,0 @@
-{
-  "neural_network_config_path": "./config.json",
-  "automorphism_key_path": "",
-  "crypto_context_path" : ""
-}

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import unittest
 from unittest import mock
@@ -21,11 +22,15 @@ def make_key_dict(*args):
 def make_ct(*args):
     return urlsafe_b64encode(open("/home/Leonard/Documents/libmozaik/fhe/SERVER/test_assets/test.ct.enc","rb").read()).decode()
 
+def store_result_fake(*args):
+    with open("logfile","w") as F:
+        F.writelines(list(map(str, args)))
+
 class TestFHEServer(unittest.TestCase):
 
     def setUp(self):
         # Create necessary directories
-        self.base_path = "/home/Leonard/Documents/libmozaik/fhe/SERVER"
+        self.base_path = "/home/Leonard/Documents/libmozaik/fhe/SERVER/tmp/"
 
         # Mock MozaikObelisk and configure it to return expected values
         self.mozaik_obelisk_patcher = mock.patch('server.MozaikObelisk')
@@ -33,7 +38,7 @@ class TestFHEServer(unittest.TestCase):
         self.mock_mozaik_obelisk_instance = self.mock_mozaik_obelisk_class.return_value
         self.mock_mozaik_obelisk_instance.get_data.return_value = make_ct()
         self.mock_mozaik_obelisk_instance.get_keys.return_value = make_key_dict()
-        self.mock_mozaik_obelisk_instance.store_result.return_value = None
+        self.mock_mozaik_obelisk_instance.store_result.side_effect = store_result_fake
 
         self.key_names = ["automorphism_key","multiplication_key","crypto_context"]
 
@@ -57,23 +62,18 @@ class TestFHEServer(unittest.TestCase):
             }
             response = client.post('/analyse/', json=data)
 
+            time.sleep(1)
+
             self.assertEqual(response.status_code, 201)
             self.assertIn("Request added to the queue", response.get_data(as_text=True))
 
-            time.sleep(2)
-
-            resp = response.get_json()
-
-            stat = client.get("/status/123")
-            import sys
-
-
-            print(stat.get_data(), file=sys.stderr)
-
-            # Assert the behavior of res
-            # self.assertEqual(self.server.res.status, 'SUCCESS')
-            self.assertEqual(resp["status"], "Request added to the queue")
-
+            while True:
+                stat = client.get("/status/123")
+                stat_cont = stat.get_json()
+                if stat_cont["type"] == "COMPLETED" or stat_cont["type"] == "UNKNOWN":
+                    break
+                time.sleep(1)
+            print("OK")
 
 if __name__ == '__main__':
     unittest.main()

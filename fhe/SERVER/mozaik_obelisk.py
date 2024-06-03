@@ -1,6 +1,9 @@
+import json
+
 import requests
 import base64
 import time
+import gzip
 
 class MozaikObelisk:
     """
@@ -150,8 +153,6 @@ class MozaikObelisk:
                 # Parse and return the user_data from the JSON response
                 keys["automorphism_key"] = response.json().get('automorphism_key')
                 keys["multiplication_key"] = response.json().get('multiplication_key')
-                keys['addition_key'] = response.json().get('addition_key')
-                keys['bootstrap_key'] = response.json().get('bootstrap_key')
 
                 # Switch them to correct format if needed
                 for key in keys:
@@ -210,4 +211,47 @@ class MozaikObelisk:
             # Raise an exception if the request encountered an exception
             raise requests.RequestException(f"Request encountered an exception: {e}")
 
+    def store_result_compression(self, analysis_id, user_id, result,*args):
+        """
+        POST method to store result in the Mozaik Obelisk service.
+
+        Arguments:
+            analysis_id (str) : The ID of the analysis.
+            user_id (str) : The ID of the user.
+            result (str) : The result to store.
+
+        Returns:
+            A tuple containing the status and the response.
+        """
+        endpoint = f'/analysis/result/{analysis_id}'
+
+        # Construct the full URL
+        url = f'{self.base_url}{endpoint}'
+
+        # Define the payload (data to be sent in the POST request)
+        payload = {
+            'user_id': user_id,
+            'result': result,
+        }
+
+        payload_dumped = json.dumps(payload).encode("utf-8")
+        payload_compressed = gzip.compress(payload_dumped, compresslevel=5)
+
+        headers = {
+            "authorization": self.auth_token,
+            "Content-length": len(payload_compressed),
+            "Content-Encoding": "gzip"
+        }
+
+        try:
+            # Make the POST request
+            response = requests.post(url, data=payload_compressed, headers=headers)
+
+            # Check if the request was successful (status code 204)
+            if response.status_code != 204:
+                # Raise an exception if the request was not successful
+                raise requests.RequestException(f"Request failed with status code {response.status_code}")
+        except requests.RequestException as e:
+            # Raise an exception if the request encountered an exception
+            raise requests.RequestException(f"Request encountered an exception: {e}")
 
