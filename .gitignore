@@ -4,3 +4,8 @@ fhe/assets/dependencies/openfhe/
 fhe/cmake-build-*
 /fhe/build2/
 /client/blob.js
+fhe/SERVER/__pycache__/
+fhe/SERVER/test_assets/
+fhe/SERVER/tmp/
+fhe/assets/nn_data/
+
