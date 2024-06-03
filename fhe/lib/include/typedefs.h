@@ -11,6 +11,7 @@ namespace ckks_nn {
 
     using namespace lbcrypto;
 
+    const auto ser_type = lbcrypto::SerType::BINARY;
     using CKKSCiphertext = Ciphertext<DCRTPoly>;
 
     const std::string CC_STRING = "crypto_context";

@@ -10,7 +10,7 @@ class FHEDataManager:
 
     key_cache_name = "keys"
     model_cache_name = "models"
-    expected_keys = ["automorphism_key","addition_key","multiplication_key","bootstrapping_key"]
+    expected_keys = ["automorphism_key","multiplication_key","crypto_context"]
 
     def __init__(self, base_path="./", max_cache_size=10, encoding="JSON"):
         self.base_path = Path(base_path)
@@ -45,14 +45,12 @@ class FHEDataManager:
         analysis_dir = self.neural_net_cache / analysis_type
         return analysis_dir.exists()
 
-    def put_keys_into_cache(self, user_id: str, auto_key: str, mult_key: str, add_key: str, boot_key: str):
-        all_keys = [auto_key, mult_key, add_key, boot_key]
+    def put_keys_into_cache(self, user_id: str, auto_key: str, mult_key: str, crypto_context: str):
+        all_keys = [auto_key, mult_key,crypto_context]
         user_key_dir = self.key_cache / user_id
 
         # Ensure the user key directory exists
         user_key_dir.mkdir(parents=True, exist_ok=True)
-
-        # TODO add cache policy LRU or something else
 
         # Transform keys back to bytes
         for name, key in zip(self.expected_keys, all_keys):
@@ -70,9 +68,9 @@ class FHEDataManager:
         config = {}
         for key in self.expected_keys:
             key_file = user_key_dir / key
-            config[key + "_path"] = str(key_file.absolute())
+            config[key] = str(key_file.absolute())
         nn_path = self.neural_net_cache / analysis_type / "config.json"
-        config["neural_network_config_path"] = str(nn_path.absolute())
+        config["neural_network_config"] = str(nn_path.absolute())
 
         config_path = user_key_dir / "crypto_config.json"
         with config_path.open("w") as F:

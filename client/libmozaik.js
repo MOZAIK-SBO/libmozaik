@@ -100,19 +100,50 @@ async function parse_plaintext_from_string(pt_in) {
     let pt_vec = plaintext_string.slice(1, idx_part);
     let coef_str_arr = pt_vec.split(",");
     // last entry will be nan since openfhe truncates output after index=batchsize
-    return coef_str_arr.map(parseFloat).slice(0, -1)
+    let vals = coef_str_arr.map(parseFloat).slice(0, 5);
+    // In the end, we compute softmax here, for both accuracy and speed
+	// There is no loss in privacy, since softmax can be inverted up to a constant
+	// equal in every slot, i.e. only the mean of the input distribution
+	// is shifted, not the other parameters. This is also a reason
+	// why there are alternatives if one is concerned about adversarial ml
+    let val_exp = vals.map(Math.exp);
+    let norm = val_exp.reduce((acc,x) => acc + x, 0);
+    return val_exp.map((x) => x / norm);
 }
 
-async function DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr){
+async function DecryptCKKSCipherText(cryptoContextSer, encryptedResultSer, secretKeySer){
 
     let OpenFHE = await Module();
 
     const sertype = OpenFHE.SerType.JSON;
+
+    let enc = new TextEncoder();
+    var cc_arr;
+    var ct_arr;
+    var sk_arr;	
+
+    if (sertype != OpenFHE.SerType.JSON) {
+	let cc_bin = atob(cryptoContextSer.replace(/_/g, '/').replace(/-/g, '+'));
+	let ct_bin = atob(encryptedResultSer.replace(/_/g, '/').replace(/-/g, '+'));
+	let sk_bin = atob(secretKeySer.replace(/_/g, '/').replace(/-/g, '+'));
+	cc_arr = [...Array(cc_bin.length).keys()].map((x) => cc_bin.charCodeAt(x));
+	ct_arr = [...Array(ct_bin.length).keys()].map((x) => ct_bin.charCodeAt(x));
+	sk_arr = [...Array(sk_bin.length).keys()].map((x) => sk_bin.charCodeAt(x));
+    } else {
+    	cc_arr = enc.encode(cryptoContextSer);
+    	ct_arr = enc.encode(encryptedResultSer);
+    	sk_arr = enc.encode(secretKeySer);
+    }
+
+    console.log(cc_arr);
+    console.log(ct_arr);
+    console.log(sk_arr);
+
     // Sample Program: Step 1: Set CryptoContext
-    console.debug("Setting up the Cryptocontext")
+    console.log("Setting up the Cryptocontext")
 
     const cc = await OpenFHE.DeserializeCryptoContextFromBuffer(cc_arr, sertype);
-    console.debug("CryptoContext was deserialized properly");
+    console.log("CryptoContext was deserialized properly");
 
     const ct1 = await OpenFHE.DeserializeCiphertextFromBuffer(ct_arr, sertype);
     console.debug("CipherText was deserialized properly");
@@ -122,7 +153,7 @@ async function DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr){
 
     // Decrypt the result of additions
     const plaintext = cc.Decrypt(sk, ct1);
-    plaintext.SetLength(cc.GetBatchSize());
+    plaintext.SetLength(5);
 
     OpenFHE.ReleaseAllContexts();
 
@@ -130,13 +161,8 @@ async function DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr){
 }
 
 export async function reconstructResultFHE(userId,cryptoContextSer,secretKeySer,encryptedResultSer) {
-
-    console.log("Executing Reconstruct");
-    let enc = new TextEncoder();
-    let cc_arr = enc.encode(cryptoContextSer);
-    let ct_arr = enc.encode(encryptedResultSer);
-    let sk_arr = enc.encode(secretKeySer);
-
+	console.log(cryptoContextSer);
+    console.debug("Executing Reconstruct");
     // result is an array of doubles
-    return await DecryptCKKSCipherText(cc_arr, ct_arr, sk_arr);
+    return await DecryptCKKSCipherText(cryptoContextSer, encryptedResultSer, secretKeySer);
 }

@@ -1,8 +1,7 @@
 import json
 from typing import Dict, Tuple, List
 
-from celery import Celery, shared_task, chain
-from celery.result import AsyncResult, states
+
 
 from flask import request, Flask, jsonify
 from threading import Thread, RLock
@@ -83,7 +82,7 @@ class FHEServer:
         if not user_in_cache:
 
             keys = self.mozaik_obelisk.get_keys(analysis_id=analysis_id)
-            self.data_worker.put_keys_into_cache(user_id, keys['automorphism_key'], keys['multiplication_key'], keys['addition_key'], keys['bootstrap_key'])
+            self.data_worker.put_keys_into_cache(user_id, keys['automorphism_key'], keys['multiplication_key'], keys["crypto_context"])
             config_path = self.data_worker.generate_config(user_id, analysis_id)
 
         ct_paths = []
@@ -99,6 +98,7 @@ class FHEServer:
 
         # request remaining ones
         data_to_request = list(zip(*data_index_to_request)[0])
+        print(data_to_request)
         ct_data = self.mozaik_obelisk.get_data(analysis_id, user_id, data_to_request)
         for (i, datum_index), ct_datum in zip(data_index_to_request, ct_data):
             ct_path = self.data_worker.put_ct_into_dir(user_id,datum_index,ct_datum)
@@ -109,9 +109,9 @@ class FHEServer:
         for i, ct_path in ct_paths:
 
             if analysis_type == "Heartbeat-Demo-1":
-                inference_binary_path = self.data_worker.base_path / "run_network_server"
-                # res = subprocess.Popen([str(inference_binary_path), config_path, ct_path])
-                res = subprocess.check_output(["/usr/bin/touch", ct_path + ".out"])
+                inference_binary_path = self.data_worker.bin + "/fhe_server"
+                res = subprocess.Popen([str(inference_binary_path), config_path, ct_path])
+                # res = subprocess.check_output(["/usr/bin/touch", ct_path + ".out"])
                 if self.data_worker.encoding == "JSON":
                     ct_out_data = open(ct_path + ".out","r").read()
                 else:

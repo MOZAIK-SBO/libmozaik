@@ -13,21 +13,21 @@
       "dims" : [50, 50],
       "weight_path": "weights_1_relu.txt",
       "bias_path": "biases_1_relu.txt",
-      "bounds": [-2, 4],
+      "bounds": [-3, 5],
       "activation": "relu"
     },
     {
       "dims" : [50, 50],
       "weight_path": "weights_2_relu.txt",
       "bias_path": "biases_2_relu.txt",
-      "bounds": [-2, 3],
+      "bounds": [-7, 12],
       "activation": "relu"
     },
     {
       "dims" : [50, 50],
       "weight_path": "weights_3_relu.txt",
       "bias_path": "biases_3_relu.txt",
-      "bounds": [-2, 4],
+      "bounds": [-14, 26],
       "activation": "relu"
     },
     {
