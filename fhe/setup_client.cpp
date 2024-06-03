@@ -21,19 +21,9 @@ using json = nlohmann::json;
 using namespace lbcrypto;
 using namespace ckks_nn;
 
-/*
- * We might need to target wasm to be able to encrypt and decrypt results in the browser. Same goes for keygen.
- * Generating the keys somewhere that's not the IOT device or client is pointless
- * so if we run in wasm, we wouldn't actually store the keys on device but rather generate locally in
- * browser, send it correctly to the remote host and store the FHE secret key locally and encrypted using asymmetric
- * crypto somewhere else.
- * Note: WE MUST MAKE THE CLIENT SIDE CODE PUBLIC AND GIVE USERS THE OPTION TO GENERATE THE KEYS THEMSELVES.
- * Otherwise, we could just execute arbitrary code on their device if they have no method to verify the correctness
- * of the key generation process.
- *
- */
 
-const auto ser_type = SerType::JSON;
+const std::vector<int32_t> auto_indices = { 50, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, -50, 14, 15, 16, 17, 18, 19, 20, 21, 38, 39, 40, 42, 43, 44, 45, 46, 47, 48, 49, 100, 41, -200, 27, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 26, 25, 24, 23, 22 };
+
 
 int main(int argc, char* argv[]) {
 
@@ -54,36 +44,61 @@ int main(int argc, char* argv[]) {
 
     fs::create_directory(key_dir);
 
-    int m_batch_size = 256;
+    auto m_batch_size = 256;
+
     std::vector<int32_t> automorphism_indices;
     for(int32_t i = 1; i < m_batch_size; i++) {
+        automorphism_indices.push_back(i);
         automorphism_indices.push_back(-i);
     }
 
-    // Generate parameters and keys
     CCParams<CryptoContextCKKSRNS> cc_params;
-
-    // Hardcode for now
-    cc_params.SetMultiplicativeDepth(10);
-    cc_params.SetScalingModSize(50);
-    cc_params.SetBatchSize(256);
+    cc_params.SetSecretKeyDist(SPARSE_TERNARY);
+    cc_params.SetRingDim(1 << 10);
     cc_params.SetSecurityLevel(HEStd_NotSet);
-    cc_params.SetRingDim(512);
 
-    CryptoContext<DCRTPoly> cc = GenCryptoContext(cc_params);
+    cc_params.SetNumLargeDigits(3);
+    cc_params.SetBatchSize(m_batch_size);
+
+    std::vector<uint32_t> levelBudget = {5, 4};
+
+    int dcrtBits               = 59;
+    int firstMod               = 60; //45: 4.XX - 48: 7.84 - 51: 8.07:
+
+    cc_params.SetScalingModSize(dcrtBits);
+    cc_params.SetScalingTechnique(FLEXIBLEAUTOEXT);
+    cc_params.SetFirstModSize(firstMod);
+
+    uint32_t levels = 50;
+    cc_params.SetMultiplicativeDepth(levels);
+
+    auto cc = GenCryptoContext(cc_params);
+
     cc->Enable(PKE);
     cc->Enable(LEVELEDSHE);
     cc->Enable(ADVANCEDSHE);
     cc->Enable(FHE);
+
+    //cc->EvalBootstrapSetup(levelBudget, {0,0}, m_batch_size);
+
     auto key = cc->KeyGen();
 
     cc->EvalMultKeyGen(key.secretKey);
-    cc->EvalRotateKeyGen(key.secretKey, automorphism_indices);
-    cc->EvalSumKeyGen(key.secretKey);
+    cc->EvalRotateKeyGen(key.secretKey, auto_indices);
+    //cc->EvalSumKeyGen(key.secretKey);
+    std::cout << "Finished writing sum keys" << std::endl;
+    //cc->EvalBootstrapKeyGen(m_key.secretKey, m_batch_size);
+    std::cout << "Finished generation BS keys" << std::endl;
 
     ////// Serialize all keys
     if (!Serial::SerializeToFile(key_dir / CC_STRING, cc, ser_type)) {
         std::cerr << "Error writing serialization of the crypto context to " << (key_dir / CC_STRING).string()
+                  << std::endl;
+        std::exit(1);
+    }
+
+    if (!Serial::SerializeToFile(key_dir / "crypto_context.json", cc, SerType::JSON)) {
+        std::cerr << "Error writing serialization of the crypto context (JSON) to " << (key_dir / CC_STRING).string()
                   << std::endl;
         std::exit(1);
     }
@@ -94,6 +109,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (!Serial::SerializeToFile(key_dir / SK_STRING, key.secretKey, ser_type)) {
+        std::cerr << "Error writing secret key to " << (key_dir / SK_STRING).string() << std::endl;
+        std::exit(1);
+    }
+
+    if (!Serial::SerializeToFile(key_dir / "secret_key.json", key.secretKey, SerType::JSON)) {
         std::cerr << "Error writing secret key to " << (key_dir / SK_STRING).string() << std::endl;
         std::exit(1);
     }
@@ -124,6 +144,7 @@ int main(int argc, char* argv[]) {
         std::exit(1);
     }
 
+    /*
     std::ofstream sumKeyFile(key_dir / SUM_STRING, std::ios::out | std::ios::binary);
     if (sumKeyFile.is_open()) {
         if (!cc->SerializeEvalSumKey(sumKeyFile, ser_type)) {
@@ -135,22 +156,9 @@ int main(int argc, char* argv[]) {
     else {
         std::cerr << "Error serializing sum keys" << std::endl;
         std::exit(1);
-    }
+    } */
 
-    cc->Ser
 
-    std::ofstream bootKeyFile(key_dir / BOOT_STRING, std::ios::out | std::ios::binary);
-    if (bootKeyFile.is_open()) {
-        if (!cc->Serialize(sumKeyFile, ser_type)) {
-            std::cerr << "Error writing sum keys" << std::endl;
-            std::exit(1);
-        }
-        sumKeyFile.close();
-    }
-    else {
-        std::cerr << "Error serializing sum keys" << std::endl;
-        std::exit(1);
-    }
 
     //// Write JSON config
     json crypto_context;

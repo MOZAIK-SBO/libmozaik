@@ -18,7 +18,6 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-const auto ser_type = lbcrypto::SerType::JSON;
 
 namespace ckks_nn {
     // Begin cursed
@@ -51,11 +50,11 @@ namespace ckks_nn {
 
     // End cursed
     CKKSCiphertext NeuralNetEvaluator::eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input) {
-        std::cout << "Layer... 0" << std::endl;
+        //std::cout << "Layer... 0" << std::endl;
         auto layer_i_out = eval_layer(nn, 0, input);
 
         for(int_type i=1; i < nn.get_n_layers(); i++) {
-            std::cout << "Layer..." << i << std::endl;
+            // << "Layer..." << i << std::endl;
             layer_i_out = eval_layer(nn, i, layer_i_out);
         }
 
@@ -73,7 +72,7 @@ namespace ckks_nn {
         m_cc->EvalAddInPlace(tmp, bias_encoded);
 
         auto act_res = eval_activation(nn, layer_idx, tmp);
-        //std::cout << "L_out activation " << act_res->GetLevel() << std::endl;
+        //// << "L_out activation " << act_res->GetLevel() << std::endl;
         return act_res;// m_cc->EvalBootstrap(act_res,2,13);
     }
 
@@ -117,7 +116,7 @@ namespace ckks_nn {
             std::vector<double> coefs(m_batch_size, 0);
 
             auto row_i = nn.get_diag_col(layer_idx, i);
-            // std::cout << i << " " << row_i[0] << std::flush;
+            // // << i << " " << row_i[0] << std::flush;
             std::copy(row_i.begin(), row_i.end(), coefs.begin());
             std::copy(row_i.begin(), row_i.begin() + dim, coefs.begin() + dim);
 
@@ -144,7 +143,7 @@ namespace ckks_nn {
         int32_t padded_length = rat * cols;
         assert((cols + padded_length) <= m_batch_size);
 
-        // std::cout << rat << " " << padded_length << std::endl;
+        // // << rat << " " << padded_length << std::endl;
 
         /* First, we need to mirror the coefficients s.t. we can perform cyclic rotations */
         // Step 1 masking
@@ -160,10 +159,12 @@ namespace ckks_nn {
         auto vector_upto_rows = m_cc->EvalMult(vector, mask_row_ptx);
         auto vector_upto_cols = m_cc->EvalMult(vector, mask_col_ptx);
 
+
+        m_rot_indices.emplace(-padded_length);
         auto vector_upto_cols_rot = m_cc->EvalRotate(vector_upto_cols, -padded_length);
         auto vector_mirror = m_cc->EvalAdd(vector_upto_rows, vector_upto_cols_rot);
 
-        //std::cout << "Masking done" << std::endl;
+        //// << "Masking done" << std::endl;
         auto row_0 = nn.get_diag_col(layer_idx, 0);
         auto row_0_ptx = m_cc->MakeCKKSPackedPlaintext(row_0);
         auto acc = m_cc->EvalMult(vector_mirror, row_0_ptx);
@@ -174,13 +175,14 @@ namespace ckks_nn {
             std::vector<double> coefs(m_batch_size, 0);
 
             auto row_i = nn.get_diag_col(layer_idx, i);
-            // std::cout << i << " " << row_i[0] << std::flush;
+            // // << i << " " << row_i[0] << std::flush;
             std::copy(row_i.begin(), row_i.end(), coefs.begin());
             std::copy(row_i.begin(), row_i.begin() + cols, coefs.begin() + padded_length);
 
             auto row_ptx = m_cc->MakeCKKSPackedPlaintext(coefs);
             auto mul_res = m_cc->EvalMult(vector_mirror, row_ptx);
 
+            m_rot_indices.emplace((cols - i) % cols);
             auto rot_vec = m_cc->EvalRotate(mul_res, (cols - i)%cols);
 
             m_cc->EvalAddInPlace(acc, rot_vec);
@@ -191,6 +193,7 @@ namespace ckks_nn {
         // check whether ratio of (extended) rows to cols is power of 2, in which case the reduction is trivial
         if ((rat_u & (rat_u - 1)) == 0) {
             for (int32_t i = padded_length / 2; i >= cols; i /= 2) {
+                m_rot_indices.emplace(i);
                 auto tmp = m_cc->EvalRotate(acc, i);
                 m_cc->EvalAddInPlace(acc, tmp);
             }
@@ -204,11 +207,12 @@ namespace ckks_nn {
                 pow2rat *= 2;
             } while (pow2rat < rat);
             for (int32_t i = cols * pow2rat / 2; i >= cols; i /= 2) {
+                m_rot_indices.emplace(i);
                 auto tmp = m_cc->EvalRotate(acc, i);
                 m_cc->EvalAddInPlace(acc, tmp);
             }
         }
-        // std::cout << "yep" << std::endl;
+        // // << "yep" << std::endl;
         return acc->Clone();
     }
 
@@ -225,8 +229,8 @@ namespace ckks_nn {
             case NeuralNet::Activation::RELU: {
 
                 auto func = [](double x) -> double { return x > 0 ? x : -x;};
-                std::cout << lb << ub << std::endl;
-                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 32);
+                //// << lb << ub << std::endl;
+                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 16);
 
                 return m_cc->EvalAdd(vector, tmp);
             }
@@ -276,13 +280,13 @@ namespace ckks_nn {
                 // input is between -shift, shift now
                 m_cc->EvalSubInPlace(vector, shift);
                 lb += shift;
-                std::vector<double> normalization(5, 1.0 / std::abs(lb));
+                std::vector<double> normalization(8, 0);
+                std::fill(normalization.begin(), normalization.begin() + 5, 1.0 / (2 * std::abs(lb)));
                 auto encoded_normalization = m_cc->MakeCKKSPackedPlaintext(normalization);
                 // input is between -1, 1 now
                 auto normalized = m_cc->EvalMult(vector, encoded_normalization);
                 // shift by 2 to prevent approximation error (nan) around 0
-                m_cc->EvalAddInPlace(normalized, 2);
-
+                m_cc->EvalAddInPlace(normalized, 1);
 
                 std::vector<double> exp_F = {1, 1, 0.5, 1.0/6};
                 auto exp_norm = m_cc->EvalPolyLinear(normalized,exp_F);
@@ -290,10 +294,10 @@ namespace ckks_nn {
                 auto sum_exp_norm = m_cc->EvalSum(exp_norm, 5);
 
                 auto log_F = [](double x) {return std::log(x); };
-                auto sum_exp_norm_log = m_cc->EvalChebyshevFunction(log_F, sum_exp_norm, 5 * std::exp(1), 5 * std::exp(3), 2000);
+                auto sum_exp_norm_log = m_cc->EvalChebyshevFunction(log_F, sum_exp_norm, 5 * std::exp(1), 5 * std::exp(3), 32
+                );
 
-                return m_cc->EvalSub(normalized, sum_exp_norm_log); */
-            }
+                return m_cc->EvalSub(normalized, sum_exp_norm_log); */            }
 
             default: break;
         }
@@ -328,15 +332,15 @@ namespace ckks_nn {
         m_cc->ClearEvalMultKeys();
         m_cc->ClearEvalSumKeys();
 
+        CryptoContextFactory<DCRTPoly>::ReleaseAllContexts();
+
         std::string cc_path = config[CC_STRING];
 
-        std::cout << cc_path << std::endl;
+        // << cc_path << std::endl;
         if (!Serial::DeserializeFromFile(cc_path, m_cc, ser_type)) {
             std::cerr << "I cannot read serialized data from: " << config_dir_path << cc_path << std::endl;
             std::exit(1);
         }
-
-        m_batch_size = m_cc->GetRingDimension() / 2;
 
         std::string auto_path = config[AUTO_STRING];
         std::ifstream auto_key_istream(auto_path, std::ios::in | std::ios::binary);
@@ -344,8 +348,8 @@ namespace ckks_nn {
         std::string mult_path = config[MULT_STRING];
         std::ifstream mult_key_istream(mult_path, std::ios::in | std::ios::binary);
 
-        std::string sum_path = config[SUM_STRING];
-        std::ifstream sum_key_istream(sum_path, std::ios::in | std::ios::binary);
+        //std::string sum_path = config[SUM_STRING];
+        //std::ifstream sum_key_istream(sum_path, std::ios::in | std::ios::binary);
 
         if (!mult_key_istream.is_open()) {
             std::cerr << "Cannot read serialization from " << mult_path << std::endl;
@@ -357,14 +361,15 @@ namespace ckks_nn {
             std::exit(1);
         }
 
+        /*
         if (!sum_key_istream.is_open()) {
             std::cerr << "Cannot read serialization from " << sum_path << std::endl;
             std::exit(1);
-        }
+        }*/
 
-        std::cout << m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, ser_type) << std::endl;
-        std::cout << m_cc->DeserializeEvalMultKey(mult_key_istream, ser_type) << std::endl;
-        std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
+        m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, ser_type);
+        m_cc->DeserializeEvalMultKey(mult_key_istream, ser_type);
+        ////std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
     }
 
     CKKSCiphertext NeuralNetEvaluator::load_ciphertext_from_file(const std::string &ct_path) {
@@ -385,7 +390,7 @@ namespace ckks_nn {
             std::exit(-1);
         }
 
-        if (!Serial::SerializeToFile(path, ct, ser_type)) {
+        if (!Serial::SerializeToFile(path + ".json", ct, SerType::JSON)) {
             std::cerr << " Error writing ciphertext 2" << std::endl;
         }
     }

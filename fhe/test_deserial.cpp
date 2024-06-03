@@ -11,6 +11,8 @@
 
 using namespace lbcrypto;
 
+const auto ser_type = SerType::BINARY;
+
 int main() {
     CryptoContext<DCRTPoly> cc;
     KeyPair<DCRTPoly> clientKP;
@@ -20,13 +22,13 @@ int main() {
     cc->ClearEvalAutomorphismKeys();
     CryptoContextFactory<DCRTPoly>::ReleaseAllContexts();
 
-    std::string cc_path = "/home/leonard/PhD/libmozaik/fhe/build2/test_keys/crypto_context";
-    std::string ct_path = "/home/leonard/PhD/libmozaik/fhe/build2/data.ct";
-    std::string sk_path = "/home/leonard/PhD/libmozaik/fhe/build2/test_keys/secret_key";
+    std::string cc_path = "/home/Leonard/Documents/libmozaik/fhe/cmake-build-debug/test_keys/crypto_context";
+    std::string ct_path = "/home/Leonard/Documents/libmozaik/fhe/cmake-build-debug/test.ct.enc.out.json";
+    std::string sk_path = "/home/Leonard/Documents/libmozaik/fhe/cmake-build-debug/test_keys/secret_key";
 
-    Serial::DeserializeFromFile(cc_path, cc, SerType::JSON);
+    Serial::DeserializeFromFile(cc_path, cc, ser_type);
     Serial::DeserializeFromFile(ct_path, ct, SerType::JSON);
-    Serial::DeserializeFromFile(sk_path, clientKP.secretKey, SerType::JSON);
+    Serial::DeserializeFromFile(sk_path, clientKP.secretKey, ser_type);
 
     Plaintext  pt;
     auto dec = cc->Decrypt(clientKP.secretKey, ct, &pt);

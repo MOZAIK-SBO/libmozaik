@@ -60,9 +60,10 @@ int main(int argc, char* argv[]) {
     // Load neural network
     auto nn = NeuralNetEvaluator::build_nn_from_crypto_config(config_dir, config_file);
     // Load ciphertexts
-    auto ciphertext = NeuralNetEvaluator::load_ciphertext_from_file(ct_file);
     // Evaluate
     auto nn_evaluator = NeuralNetEvaluator(config_dir);
+    auto ciphertext = NeuralNetEvaluator::load_ciphertext_from_file(ct_file);
+
     auto result = nn_evaluator.eval_network(nn, ciphertext);
     // Write result
     NeuralNetEvaluator::write_results(result, out_file);

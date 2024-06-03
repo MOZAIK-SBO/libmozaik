@@ -80,9 +80,8 @@ int main() {
     auto keys = evaluator.m_key;
     std::vector<double> test_vec(256, 0);
     for(int i = 0; i < 186; i++) {
-        test_vec[i] = std::round(sample0[i] * 1000) / 1000;
+        test_vec[i] = std::round(sample4[i] * 1000) / 1000;
     }
-
 
     Plaintext pt = cc->MakeCKKSPackedPlaintext(test_vec);
     pt->SetLength(evaluator.m_batch_size);
@@ -97,9 +96,15 @@ int main() {
     Plaintext result;
 
     cc->Decrypt(keys.secretKey, res, &result);
-    result->SetLength(50);
+    result->SetLength(5);
     std::cout << "Intermediate result is " << result << std::endl;
 
     std::cout << delta << std::endl;
+
+    std::cout << "{ ";
+    for(auto& v : evaluator.m_rot_indices) {
+        std::cout << v << ", ";
+    }
+    std::cout << "} " << std::endl;
     return 0;
 }

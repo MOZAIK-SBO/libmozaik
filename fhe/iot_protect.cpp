@@ -21,9 +21,6 @@ using namespace lbcrypto;
 using namespace ckks_nn;
 
 
-
-const auto ser_type = SerType::JSON;
-
 // We assume data file are stored with 1 value per line, delimited by \n not \r\n
 std::vector<double> read_data(fs::path& data_path, unsigned int length) {
     std::vector<double> ret(length, 0);
@@ -40,16 +37,31 @@ std::vector<double> read_data(fs::path& data_path, unsigned int length) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        std::cerr << "Usage: ./iot_protect [PUBLIC_KEY] [DATA_FILE] [OUTPUT_FILE]" << std::endl;
+    if (argc < 5) {
+        std::cerr << "Usage: ./iot_protect [CRYPTO_CONTEXT_PATH] [PUBLIC_KEY] [DATA_FILE] [OUTPUT_FILE]" << std::endl;
         std::exit(0);
     }
 
-    auto public_kay_path = fs::path(argv[1]);
-    auto data_path = fs::path(argv[2]);
-    auto res_path = fs::path(argv[3]);
+    CryptoContext<DCRTPoly> cc;
+    KeyPair<DCRTPoly> clientKP;
+    PublicKey<DCRTPoly> m_key;
 
-    if (!fs::exists(public_kay_path)){
+    cc->ClearEvalMultKeys();
+    cc->ClearEvalAutomorphismKeys();
+    cc->ClearEvalSumKeys();
+    CryptoContextFactory<DCRTPoly>::ReleaseAllContexts();
+
+    auto context_path = fs::path(argv[1]);
+    auto public_key_path = fs::path(argv[2]);
+    auto data_path = fs::path(argv[3]);
+    auto res_path = fs::path(argv[4]);
+
+    if (!fs::exists(context_path)){
+        std::cerr << "Public key path does not exist. Exiting..." << std::endl;
+        std::exit(-1);
+    }
+
+    if (!fs::exists(public_key_path)){
         std::cerr << "Public key path does not exist. Exiting..." << std::endl;
         std::exit(-1);
     }
@@ -59,20 +71,20 @@ int main(int argc, char* argv[]) {
         std::exit(-1);
     }
 
+    if (!Serial::DeserializeFromFile(context_path, cc, ser_type)) {
+        std::cerr << "Could not deserialize crypto context. Exiting..." << std::endl;
+        std::exit(-1);
+    }
 
-
-    PublicKey<DCRTPoly> m_key;
-    if (!Serial::DeserializeFromFile(public_kay_path, m_key, ser_type)) {
+    if (!Serial::DeserializeFromFile(public_key_path, m_key, ser_type)) {
         std::cerr << "Could not deserialize public key. Exiting..." << std::endl;
         std::exit(-1);
     }
 
-    auto cc = m_key->GetCryptoContext();
-
-    auto data = read_data(data_path, cc->GetRingDimension() / 2);
-    auto test = m_key->GetCryptoContext();
+    auto data = read_data(data_path, 256);
     // encrypt
     auto encode_pt = cc->MakeCKKSPackedPlaintext(data);
+
     auto ct = cc->Encrypt(m_key, encode_pt);
 
     if (!Serial::SerializeToFile(res_path, ct, ser_type)) {

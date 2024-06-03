@@ -2,28 +2,30 @@ import os
 import time
 import unittest
 from unittest import mock
-from unittest.mock import patch
-from flask import json
+
 from server import FHEServer
+from base64 import urlsafe_b64encode
 
 def make_key_dict(*args):
     keys = {}
-    keys["automorphism_key"] = open("/home/leonard/PhD/libmozaik/fhe/build2/test_keys/automorphism_key").read()
-    keys["multiplication_key"] = open("/home/leonard/PhD/libmozaik/fhe/build2/test_keys/mult_key").read()
-    keys["addition_key"] = open("/home/leonard/PhD/libmozaik/fhe/build2/test_keys/sum_key").read()
-    keys["bootstrap_key"] = open("/home/leonard/PhD/libmozaik/fhe/build2/test_keys/public_key").read()
+    keys["automorphism_key"] = open("/home/Leonard/Documents/libmozaik/fhe/SERVER/test_assets/automorphism_key","rb").read()
+    keys["multiplication_key"] = open("/home/Leonard/Documents/libmozaik/fhe/SERVER/test_assets/multiplication_key","rb").read()
+    keys["crypto_context"] = open("/home/Leonard/Documents/libmozaik/fhe/SERVER/test_assets/crypto_context","rb").read()
+
+    keys["automorphism_key"] = urlsafe_b64encode(keys["automorphism_key"]).decode()
+    keys["multiplication_key"] = urlsafe_b64encode(keys["multiplication_key"]).decode()
+    keys["crypto_context"] = urlsafe_b64encode(keys["crypto_context"]).decode()
+
     return keys
 
 def make_ct(*args):
-    return open("/home/leonard/PhD/libmozaik/fhe/build2/data.ct").read()
+    return urlsafe_b64encode(open("/home/Leonard/Documents/libmozaik/fhe/SERVER/test_assets/test.ct.enc","rb").read()).decode()
 
 class TestFHEServer(unittest.TestCase):
 
     def setUp(self):
         # Create necessary directories
-        self.base_path = "./"
-        if not os.path.exists(self.base_path):
-            os.makedirs(self.base_path)
+        self.base_path = "/home/Leonard/Documents/libmozaik/fhe/SERVER"
 
         # Mock MozaikObelisk and configure it to return expected values
         self.mozaik_obelisk_patcher = mock.patch('server.MozaikObelisk')
@@ -33,7 +35,7 @@ class TestFHEServer(unittest.TestCase):
         self.mock_mozaik_obelisk_instance.get_keys.return_value = make_key_dict()
         self.mock_mozaik_obelisk_instance.store_result.return_value = None
 
-        self.key_names = ["automorphism_key","sum_key","mult_key","public_key"]
+        self.key_names = ["automorphism_key","multiplication_key","crypto_context"]
 
         # Initialize the FHEServer
         self.server = FHEServer(base_url="http://127.0.0.1", base_path=self.base_path,
@@ -50,7 +52,7 @@ class TestFHEServer(unittest.TestCase):
             data = {
                 'analysis_id': '123',
                 'user_id': '456',
-                'data_index': [1, 2, 3],
+                'data_index': [1],
                 'analysis_type': 'Heartbeat-Demo-1'
             }
             response = client.post('/analyse/', json=data)
@@ -58,10 +60,15 @@ class TestFHEServer(unittest.TestCase):
             self.assertEqual(response.status_code, 201)
             self.assertIn("Request added to the queue", response.get_data(as_text=True))
 
-            time.sleep(1)
+            time.sleep(2)
 
             resp = response.get_json()
-            self.server.current_thread.join()
+
+            stat = client.get("/status/123")
+            import sys
+
+
+            print(stat.get_data(), file=sys.stderr)
 
             # Assert the behavior of res
             # self.assertEqual(self.server.res.status, 'SUCCESS')
