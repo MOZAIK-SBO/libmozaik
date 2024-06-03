@@ -36,7 +36,7 @@ set( CMAKE_EXE_LINKER_FLAGS "-static")
 link_libraries(OPENFHEcore_static OPENFHEpke_static OPENFHEbinfhe_static)
 
 # Executable to test network evaluation
-add_executable(fhe main.cpp
+add_executable(fhe src/main.cpp
         lib/src/neural_net_io.cpp
         lib/include/neural_net.h
         lib/src/neural_net_func.cpp
@@ -48,7 +48,7 @@ target_include_directories(fhe PUBLIC lib/include)
 target_include_directories(fhe PUBLIC assets/dependencies/nlohmann-json)
 
 # Executable that runs network from stored key material and ciphertexts
-add_executable(fhe_server run_network_server.cpp
+add_executable(fhe_server src/run_network_server.cpp
         lib/src/neural_net_io.cpp
         lib/include/neural_net.h
         lib/src/neural_net_func.cpp
@@ -59,7 +59,7 @@ target_include_directories(fhe_server PUBLIC lib/include)
 target_include_directories(fhe_server PUBLIC assets/dependencies/nlohmann-json)
 
 # Executable that generates the crypto configuration file and keys
-add_executable(client_keygen setup_client.cpp
+add_executable(client_keygen src/setup_client.cpp
         lib/src/neural_net_io.cpp
         lib/include/neural_net.h
         lib/src/neural_net_func.cpp
@@ -70,7 +70,7 @@ target_include_directories(client_keygen PUBLIC lib/include)
 target_include_directories(client_keygen PUBLIC assets/dependencies/nlohmann-json)
 
 # Executable that encrypts a sample using the public key
-add_executable(iot_protect iot_protect.cpp lib/src/neural_net_io.cpp
+add_executable(iot_protect src/iot_protect.cpp lib/src/neural_net_io.cpp
         lib/include/neural_net.h
         lib/src/neural_net_func.cpp
         lib/include/neural_net_evaluator.h
