@@ -27,7 +27,7 @@ class AnalysisApp:
             config_path (str): The path to the configuration (Config) file.
         """
         self.config = Config(config_path)
-        self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes')
+        self.aes_config = Rep3AesConfig(f'rep3aes/p{self.config.CONFIG_PARTY_INDEX + 1}.toml', 'rep3aes/target/release/rep3-aes-mozaik')
         self.app = Flask(__name__)
         print('Application started')
         self.db = Database('ecg_inference_database.db')

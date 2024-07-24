@@ -92,12 +92,14 @@ class TestDecryptKeyShare(unittest.TestCase):
 
 
 class TestRep3Aes(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        bin_path = Path('rep3aes/target/release/rep3-aes')
+    @staticmethod
+    def compileAndSetupRep3AES(cls):
+        """ Compiles the rep3-aes binary and returns its path """
+        bin_path = Path('rep3aes/target/release/rep3-aes-mozaik')
         # run cargo to compile Rep3Aes
+        env = dict(os.environ, {RUSTFLAGS: '-C target-cpu=native'})
         try:
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes-mozaik'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL, env=env)
         except FileNotFoundError:
             # when rust is installed via rustup, it is often placed in the home directory which is not always
             # part of PATH, so we need to add it before rebuilding
@@ -106,9 +108,13 @@ class TestRep3Aes(unittest.TestCase):
             possible_paths = [home / ".cargo/bin"]
             possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
             os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes-mozaik'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL, env=env)
+        return bin_path
+        
 
-        cls.rep3aes_bin = str(bin_path)
+    @classmethod
+    def setUpClass(cls):
+        cls.rep3aes_bin = cls.compileAndSetupRep3AES()
 
         # run cargo to compile iot_integration
         bin_path = Path('iot_integration/target/release/iot_integration')
@@ -284,21 +290,7 @@ class IntegrationTest(unittest.TestCase):
         cls.firefox_driver = webdriver.Firefox(options=cls.firefox_options)
 
         # Set up rep3aes
-        bin_path = Path('rep3aes/target/release/rep3-aes')
-        # run cargo to compile Rep3Aes
-        try:
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
-            # when rust is installed via rustup, it is often placed in the home directory which is not always
-            # part of PATH, so we need to add it before rebuilding
-            import sys
-            home = Path.home()
-            possible_paths = [home / ".cargo/bin"]
-            possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
-            os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
-
-        cls.rep3aes_bin = str(bin_path)
+        cls.rep3aes_bin = TestRep3Aes.compileAndSetupRep3AES()
     
     @classmethod
     def tearDownClass(cls):
