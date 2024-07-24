@@ -93,11 +93,12 @@ class TestDecryptKeyShare(unittest.TestCase):
 
 class TestRep3Aes(unittest.TestCase):
     @staticmethod
-    def compileAndSetupRep3AES(cls):
+    def compileAndSetupRep3AES():
         """ Compiles the rep3-aes binary and returns its path """
         bin_path = Path('rep3aes/target/release/rep3-aes-mozaik')
         # run cargo to compile Rep3Aes
-        env = dict(os.environ, {RUSTFLAGS: '-C target-cpu=native'})
+        env = os.environ.copy()
+        env['RUSTFLAGS'] = '-C target-cpu=native'
         try:
             subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes-mozaik'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL, env=env)
         except FileNotFoundError:
