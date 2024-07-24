@@ -517,10 +517,10 @@ class IntegrationTest(unittest.TestCase):
         analysis_type = "Heartbeat-Demo-1"
         computation_id = "28341f07-286a-4761-8fde-220b7be3d4cc"
 
-        iot_key = base64.b64encode(TestRep3Aes.expected_key).decode("ascii").rstrip("=")
+        iot_key = base64.b64encode(TestDecryptKeyShare.expected_key).decode("ascii").rstrip("=")
 
         # create key shcedule and message shares
-        k1, k2, k3 = TestRep3Aes.secret_share(TestRep3Aes.expected_key_schedule)
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
         m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         # tls_certs/server{party_index+1}.key
