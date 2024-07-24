@@ -108,6 +108,6 @@ if __name__ == "__main__":
 
 
     with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
-        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes'))
+        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
 
     process_test(task_manager1, encrypted_key_shares[config_index], config_index)
