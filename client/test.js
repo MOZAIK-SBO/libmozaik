@@ -1,4 +1,5 @@
 import { createAnalysisRequestData, reconstructResult } from "./libmozaik.js";
+import { Aes as SJCLAes } from "./aes.js";
 
 var crypto = window.crypto;
 
@@ -120,6 +121,36 @@ async function testReconstructResult() {
   console.assert(bufferToHex(result) == "884fe77815f1575505ac82e65f6a3b2c02ead604f029ca2e516e0650b866f111585ef5ec4546e010");
 }
 
+function testAesKeyschedule() {
+  const iotDeviceKey = new Uint8Array([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c]);
+  // convert into correct format
+  const aesKey = [0, 0, 0, 0];
+  for (var i=0; i<4; i++) {
+    aesKey[i] = (iotDeviceKey[4*i] << 24) + (iotDeviceKey[4*i+1] << 16) + (iotDeviceKey[4*i+2] << 8) + iotDeviceKey[4*i+3];
+  }
+  const aesCipher = new SJCLAes(aesKey);
+  const aesKeyschedule = new Uint32Array(aesCipher._key[0]); // _key[0] is the forward keyschedule 
+
+  const expected = new Uint32Array([
+    0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c,
+    0xa0fafe17, 0x88542cb1, 0x23a33939, 0x2a6c7605,
+    0xf2c295f2, 0x7a96b943, 0x5935807a, 0x7359f67f,
+    0x3d80477d, 0x4716fe3e, 0x1e237e44, 0x6d7a883b,
+    0xef44a541, 0xa8525b7f, 0xb671253b, 0xdb0bad00,
+    0xd4d1c6f8, 0x7c839d87, 0xcaf2b8bc, 0x11f915bc,
+    0x6d88a37a, 0x110b3efd, 0xdbf98641, 0xca0093fd,
+    0x4e54f70e, 0x5f5fc9f3, 0x84a64fb2, 0x4ea6dc4f,
+    0xead27321, 0xb58dbad2, 0x312bf560, 0x7f8d292f,
+    0xac7766f3, 0x19fadc21, 0x28d12941, 0x575c006e,
+    0xd014f9a8, 0xc9ee2589, 0xe13f0cc8, 0xb6630ca6
+  ]);
+  console.assert(aesKeyschedule.length == 44);
+  for (var i=0; i<44; i++) {
+    console.assert(aesKeyschedule[i] == expected[i]);
+  }
+  console.log("Test testAesKeyschedule ok");
+}
+
 testCreateAnalysisRequestData()
   .then(() => {
     console.log("Test CreateAnalysisRequestData ok");
@@ -134,3 +165,5 @@ testReconstructResult()
   .then(() => {
     console.log("Test ReconstructResult ok");
   });
+
+testAesKeyschedule();
