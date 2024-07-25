@@ -5,6 +5,8 @@ import json
 import secrets
 import subprocess
 import base64
+import threading
+import traceback
 
 from pathlib import Path
 from math import log2, ceil
@@ -20,6 +22,58 @@ from selenium.webdriver.firefox.options import Options
 
 from key_share import MpcPartyKeys, decrypt_key_share, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig, dist_enc, dist_dec
+
+class ExceptionHookContextManager:
+    """ 
+    Context manager that will raise an exception if an uncaught exception terminated a thread that is started and joined within the context.
+
+    Usage:
+    t = Thread(target=lambda: <some exception raised here>)
+    with ExceptionHookContextManager():
+        t.start()
+        # ...
+        t.join()
+    # exception will be raised at this point after the context manager exited
+    """
+
+    def __init__(self):
+        self.old_hook = None
+        self.uncaught_exceptions = list()
+    
+    def __enter__(self):
+        # register myself as excepthook but keep the old one around
+        self.old_hook = threading.excepthook
+        threading.excepthook = self.hook
+    
+    def hook(self, args):
+        # called when an uncaught exception terminates the thread
+        self.uncaught_exceptions.append((args.exc_type, args.exc_value, args.exc_traceback))
+    
+    def __exit__(self, *exc_args):
+        # register the old hook
+        threading.excepthook = self.old_hook
+        del self.old_hook
+        # check if there are exceptions
+        if len(self.uncaught_exceptions) > 0:
+            for e_type, e_value, e_traceback in self.uncaught_exceptions:
+                print(f"Uncaught exception in other thread: {e_type} {e_value}")
+                traceback.print_tb(e_traceback)
+            del self.uncaught_exceptions # to prevent reference cycles
+            raise Exception("Uncaught exception in other thread, see trace above")
+
+def exception_check():
+    """ 
+    Context manager that will raise an exception if an uncaught exception terminated a thread that is started and joined within the context.
+
+    Usage:
+    t = Thread(target=lambda: <some exception raised here>)
+    with exception_check():
+        t.start()
+        # ...
+        t.join()
+    # exception will be raised at this point after the context manager exited
+    """
+    return ExceptionHookContextManager()
 
 class TestDecryptKeyShare(unittest.TestCase):
     @staticmethod
@@ -39,6 +93,13 @@ class TestDecryptKeyShare(unittest.TestCase):
     ]
     expected_key = bytes.fromhex('12233445566778899aabbccddeeff001')
 
+    ks_ciphertexts = [
+        bytes.fromhex('47b6e2f7b24ab350d9f32e06b4161bf017021121439d8bc13abf379fd6f0c21c1ab28cd269cac4fbed90c84511ae68054ec2e640ff132e04523cb6b266e663ea420e0fae09758dbe28f1111f72cfd3334ac6e322f993eb89a2b3cabaf19c25d34df50faf99fb0bd4e1ef76a5fd16974ef6a701a308ddf5ab3c88ed796231e7f10de7cea295fd5e16804b8e0126b9f709c8b961d069d577d6dbe026430073a43146d2eadf24791b56b1bceb8e65b416b8f4e391ac2d86fe6454df3a6a5fd0cafe95dba51ebcf0b3ed920235142a85e76717127e683da8fe9ca0d96594edf6229add29c0d438802a04ff75a6b0292b81301c3e5db3241f870600577a47f5f974a0'),
+        bytes.fromhex('8924a814c2c601a456485baa6c63ec24efd4dd149dc6428883c108c8d48d58a21ed43658d5e4e2152a8808aec90c4d0dbb5f3c9b948dc97fdc334fa577087c378734985260d70c1cf16c8ad7c25369a5bf1731225a2b16b8710b66523693500b7dca23fa0e592536a527e91f70c19ef4f9b556cde7394ae14bb225389d8a2fdee0d01eceeedbae8f2d787e3965acb507c7acbd386a7bcf38fbc10565d582e7c0d18c6a9ec337bc9815f727770947d877a9781909dce5ed783cb3826f554f593870158ad917da5cc3411df8f4834a01d98159a9906e44c9c26d0fc8eb1bddac33a385da65e42eebb30bc4756c59c7342fa40fb22454728d4ffb0c345e82b2ada4'),
+        bytes.fromhex('930a004a895891669e83a9a312bc0e867deaf0f38cf1be8f1dea1b1ec2ae6aeaae15c7d8714c9f71c8b2ea774a079b66c4f49057d8f19e61c644901e11c3c7430aab28f4c3af9878b697d66c8ada75928ae4abf01659db4b4b14a1e50ba9fcf403c074b3157351126f53f79594cba14b98f5448e33cc7d9674c58c393a6c7bd027ed0831f9e7a43be21c18b40d46f315288e0bebbbf941c855ba265b51346e6d89fd85af7cba094d0f6869ed02c4de601ab2f29514d2b54503c68aad25b13c6ec4991e5732a9560450c7c2485acec2ea3387ac12a6d870b6c7b1395bd6dfd136945d22f4fada6c60e95e411f8d35e906314143d1d6cec4f8c8690e7ceffaaaa2')
+    ]
+    expected_key_schedule = bytes.fromhex('12233445566778899aabbccddeeff001ccaf48589ac830d100638c1cde8c7c1daabfec453077dc9430145088ee982c95e8cec66dd8b91af9e8ad4a71063566e476fdaf02ae44b5fb46e9ff8a40dc996ee013300b4e5785f008be7a7a4862e3146a02ca5924554fa92ceb35d36489d6c78df40c1aa9a143b3854a7660e1c3a0a7231450e28ab513510fff6531ee3cc596d3b2c0ca5907d39b56f8b6aab8c4733cf93d2ba6a03af83df6c24e974e063dab')
+
     def test_correct_decryption(self):
         shares = list()
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
@@ -57,6 +118,25 @@ class TestDecryptKeyShare(unittest.TestCase):
         for i in range(16):
             computed_key[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
         self.assertEqual(computed_key, TestDecryptKeyShare.expected_key, msg="Computed key does not match expected key")
+    
+    def test_correct_decryption_ks(self):
+        shares = list()
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        data_indices = [1706094000000, 1706094001000, 1706094002000, 1706094003000, 1706094004000, 1706094005000, 1706094006000, 1706094007000, 1706094008000, 1706094008001]
+        for i in range(3):
+            keys = MpcPartyKeys(TestDecryptKeyShare.get_config(i))
+            ct = TestDecryptKeyShare.ks_ciphertexts[i]
+            key_share = decrypt_key_share(keys, user_id, "AES-GCM-128", data_indices, analysis_type, ct)
+            assert key_share != None
+            shares.append(key_share)
+        
+        assert all(len(s) == 176 for s in shares)
+        # reconstruct and check
+        computed_keyschedule = bytearray(176)
+        for i in range(176):
+            computed_keyschedule[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
+        self.assertEqual(computed_keyschedule, TestDecryptKeyShare.expected_key_schedule, msg="Computed key schedule does not match expected")
 
     def test_params_dist_enc(self):
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(0))
@@ -92,12 +172,15 @@ class TestDecryptKeyShare(unittest.TestCase):
 
 
 class TestRep3Aes(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        bin_path = Path('rep3aes/target/release/rep3-aes')
+    @staticmethod
+    def compileAndSetupRep3AES():
+        """ Compiles the rep3-aes binary and returns its path """
+        bin_path = Path('rep3aes/target/release/rep3-aes-mozaik')
         # run cargo to compile Rep3Aes
+        env = os.environ.copy()
+        env['RUSTFLAGS'] = '-C target-cpu=native'
         try:
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes-mozaik'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL, env=env)
         except FileNotFoundError:
             # when rust is installed via rustup, it is often placed in the home directory which is not always
             # part of PATH, so we need to add it before rebuilding
@@ -106,9 +189,13 @@ class TestRep3Aes(unittest.TestCase):
             possible_paths = [home / ".cargo/bin"]
             possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
             os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes-mozaik'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL, env=env)
+        return bin_path
+        
 
-        cls.rep3aes_bin = str(bin_path)
+    @classmethod
+    def setUpClass(cls):
+        cls.rep3aes_bin = cls.compileAndSetupRep3AES()
 
         # run cargo to compile iot_integration
         bin_path = Path('iot_integration/target/release/iot_integration')
@@ -205,6 +292,43 @@ class TestRep3Aes(unittest.TestCase):
         for i, ct in enumerate(cts):
             self.assertEqual(ct.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
 
+    def test_dist_enc_ks(self):
+        # the (plaintext) prediction is a vector of 5 64-bit values in little endian
+        result = [6149648890722733960, 3187258121416518661, 3371553381890320898, 1292927509834657361, 1216049165532225112]
+        # as bytes
+        result_bytes = TestRep3Aes.encode_ring_elements(result)
+
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        computation_id = "28341f07-286a-4761-8fde-220b7be3d4cc"
+
+        # create key schedule and message shares
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
+
+        return_dict = dict()
+
+        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+        (nonce, ad) = prepare_params_for_dist_enc(MpcPartyKeys(TestDecryptKeyShare.get_config(0)), user_id, computation_id, analysis_type)
+        instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
+        instance.update(ad)
+        expected_ct, expected_tag = instance.encrypt_and_digest(result_bytes)
+
+        # collect return values and check the ciphertext
+        cts = [return_dict[i] for i in range(3)]
+        for i, ct in enumerate(cts):
+            self.assertEqual(ct.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
+
     @staticmethod
     def run_dist_dec(return_val, party, path_to_bin, key_share, ct, user_id):
         if party in [0, 1, 2]:
@@ -226,6 +350,45 @@ class TestRep3Aes(unittest.TestCase):
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
         # create key shares
         k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key)
+
+        # create a message of 187 64-bit values in little endian
+        ring_message = [secrets.randbelow(2**64) for _ in range(187)]
+        message = TestRep3Aes.encode_ring_elements(ring_message)
+        nonce = bytes.fromhex('157316abe528fe29d4716781')
+        final_ct = self.run_iot_protect(TestDecryptKeyShare.expected_key, nonce, user_id, message)
+
+        return_dict = dict()
+        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, k1, final_ct, user_id])
+        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, k2, final_ct, user_id])
+        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, k3, final_ct, user_id])
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+        # reconstruct message shares
+        m1 = return_dict[0]
+        m2 = return_dict[1]
+        m3 = return_dict[2]
+        assert len(m1) == 187
+        assert len(m2) == 187
+        assert len(m3) == 187
+
+        for i in range(187):
+            # check consistent
+            assert len(m1[i]) == 2 and len(m2[i]) == 2 and len(m3[i]) == 2
+            assert m1[i][0] == m3[i][1]
+            assert m1[i][1] == m2[i][0]
+            assert m2[i][1] == m3[i][0]
+            self.assertEqual(ring_message[i], ( m1[i][0] + m2[i][0] + m3[i][0]) % 2**64, msg="Reconstructed message did not match expected message.")
+
+    def test_dist_dec_with_ks(self):
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        # create key schedule shares
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
 
         # create a message of 187 64-bit values in little endian
         ring_message = [secrets.randbelow(2**64) for _ in range(187)]
@@ -284,21 +447,7 @@ class IntegrationTest(unittest.TestCase):
         cls.firefox_driver = webdriver.Firefox(options=cls.firefox_options)
 
         # Set up rep3aes
-        bin_path = Path('rep3aes/target/release/rep3-aes')
-        # run cargo to compile Rep3Aes
-        try:
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
-            # when rust is installed via rustup, it is often placed in the home directory which is not always
-            # part of PATH, so we need to add it before rebuilding
-            import sys
-            home = Path.home()
-            possible_paths = [home / ".cargo/bin"]
-            possible_paths_str = ":".join(str(pp.absolute()) for pp in possible_paths)
-            os.environ["PATH"] = os.environ["PATH"] + ":" + possible_paths_str
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'rep3-aes'], cwd='./rep3aes/', check=True, stderr=subprocess.DEVNULL)
-
-        cls.rep3aes_bin = str(bin_path)
+        cls.rep3aes_bin = TestRep3Aes.compileAndSetupRep3AES()
     
     @classmethod
     def tearDownClass(cls):
@@ -358,7 +507,7 @@ class IntegrationTest(unittest.TestCase):
             shares.append(key_share)
 
         result = [a ^ b ^ c for a, b, c in zip(*shares)]
-        self.assertListEqual(list(result), list(iot_key_bytes))
+        self.assertListEqual(list(result), list(TestDecryptKeyShare.expected_key_schedule))
 
     def test_reconstruct_result_of_dist_enc(self):
         result = [6149648890722733960, 3187258121416518661, 3371553381890320898, 1292927509834657361,
@@ -376,6 +525,56 @@ class IntegrationTest(unittest.TestCase):
 
         # create key and message shares
         k1, k2, k3 = TestRep3Aes.secret_share(iot_key_bytes)
+        m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
+
+        # tls_certs/server{party_index+1}.key
+        key_path = Path("./tls_certs/")
+        analysis_type="Heartbeat-Demo-1"
+
+        p1_key_path = key_path / "server1.key"
+        p2_key_path = key_path / "server2.key"
+        p3_key_path = key_path / "server3.key"
+
+        key1, p1_json = self.pem_to_jwt(p1_key_path)
+        key2, p2_json = self.pem_to_jwt(p2_key_path)
+        key3, p3_json = self.pem_to_jwt(p3_key_path)
+
+        return_dict = dict()
+
+        t1 = Thread(target=TestRep3Aes.run_dist_enc,
+                    args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+        t2 = Thread(target=TestRep3Aes.run_dist_enc,
+                    args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+        t3 = Thread(target=TestRep3Aes.run_dist_enc,
+                    args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+        for i in range(3):
+            res_i = return_dict[i]
+            res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
+            recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
+            self.assertListEqual(list(result_bytes), list(recon_i))
+    
+    def test_reconstruct_result_of_dist_enc_ks(self):
+        result = [6149648890722733960, 3187258121416518661, 3371553381890320898, 1292927509834657361,
+                  1216049165532225112]
+        # as bytes
+        result_bytes = TestRep3Aes.encode_ring_elements(result)
+
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        computation_id = "28341f07-286a-4761-8fde-220b7be3d4cc"
+
+        iot_key = base64.b64encode(TestDecryptKeyShare.expected_key).decode("ascii").rstrip("=")
+
+        # create key shcedule and message shares
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
         m1, m2, m3 = TestRep3Aes.secret_share_ring(result)
 
         # tls_certs/server{party_index+1}.key

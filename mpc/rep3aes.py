@@ -16,24 +16,30 @@ def dist_enc(config, keys, user_id, computation_id, analysis_type, key_share, me
      - user_id: string
      - computation_id: string
      - analysis_type: string
-     - key_share: bytes-like of length 16
+     - key_share: bytes-like of length 16 or 176
      - message_share: list-like of 64-bit numbers in pairs (e.g. [[1,2], [3,4]])
     
     Returns ciphertext: bytes-like
     """
-    if len(key_share) != 16:
-        raise ValueError("Expected key_share to be 16 bytes")
+    if len(key_share) != 16 and len(key_share) != 176:
+        raise ValueError("Expected key_share to be 16 or 176 bytes")
     for (i,(v1,v2)) in enumerate(message_share):
         if abs(v1) >= 2**64 or abs(v2) >= 2**64:
             raise ValueError(f'Message share at index {i} is larger than 64-bits: {v}')
     (nonce, ad) = prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type)
     command = [config.bin, '--config', config.config, 'encrypt', '--mode', 'AES-GCM-128']
-    input_args = json.dumps({
-        'key_share': key_share.hex(),
+    args = {
         'nonce': nonce.hex(),
         'associated_data': ad.hex(),
         'message_share': message_share
-    })
+    }
+    if len(key_share) == 16:
+        args['key_share'] = key_share.hex()
+    elif len(key_share) == 176:
+        args['key_schedule_share'] = key_share.hex()
+    else:
+        raise ValueError("Unsupported key_share length")
+    input_args = json.dumps(args)
 
     # print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
@@ -58,25 +64,31 @@ def dist_dec(config, user_id, key_share, ciphertext):
     Arguments
     - config: Rep3AesConfig
     - user_id: string
-    - key_share: bytes-like of length 16
+    - key_share: bytes-like of length 16 or 176
     - ciphertext: bytes-like
 
     Returns list of pairs of 64-bit numbers
     """
-    if len(key_share) != 16:
-        raise ValueError("Expected key_share to be 16 bytes")
+    if len(key_share) != 16 and len(key_share) != 176:
+        raise ValueError("Expected key_share to be 16 or 176 bytes")
     if len(ciphertext) < 28:
         raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
     # print(key_share.hex(), ciphertext.hex())
     nonce = ciphertext[:12]
     ad = bytes(user_id, encoding='utf-8') + nonce
     command = [config.bin, '--config', config.config, 'decrypt', '--mode', 'AES-GCM-128']
-    input_args = json.dumps({
-        'key_share': key_share.hex(),
+    args = {
         'nonce': nonce.hex(),
         'associated_data': ad.hex(),
         'ciphertext': ciphertext[12:].hex()
-    })
+    }
+    if len(key_share) == 16:
+        args['key_share'] = key_share.hex()
+    elif len(key_share) == 176:
+        args['key_schedule_share'] = key_share.hex()
+    else:
+        raise ValueError("Unsupported key_share length")
+    input_args = json.dumps(args)
     # print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
     if result.returncode != 0:
