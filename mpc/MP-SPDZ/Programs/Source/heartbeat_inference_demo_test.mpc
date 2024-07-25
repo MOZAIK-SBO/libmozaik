@@ -4,7 +4,7 @@ program.use_trunc_pr = True
 
 import numpy as np
 
-# sfix.set_precision(8,16)
+sfix.set_precision(8,16)
 
 """
 INSTRUCTIONS FOR BENCHMARK
@@ -84,7 +84,7 @@ biases4.input_from(1)
 """
 Load input (query samples) from client
 """
-input_data = sfix.Tensor([1, 187])
+input_data = sfix.Tensor([128, 187])
 
 i0_dim0 = sint.get_input_from(2)
 i0_dim1 = sint.get_input_from(2)
@@ -119,7 +119,7 @@ layers = [
 
 model = tf.keras.models.Sequential(layers)
 
-model.build(input_data.sizes, 1)
+model.build(input_data.sizes, batch_size=128)
 
 #Update the weights and biases of each layer
 model.opt.layers[0].W = weights0
@@ -138,8 +138,4 @@ guesses = model.predict(input_data)
 print_ln('Prediction: %s', guesses[0].reveal())
 
 sfix.write_to_file(guesses[0])
-
-
-
-
 

@@ -108,7 +108,3 @@ sfix.write_to_file(guesses[0])
 # @for_range(len(guesses))
 # def _(i):
 #     sfix.write_to_file(guesses[i])
-
-
-
-

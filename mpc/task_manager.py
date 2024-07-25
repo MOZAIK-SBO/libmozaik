@@ -260,7 +260,10 @@ class TaskManager:
                             self.db.set_status(analysis_id, 'Starting computation')
                             results = []
 
-                            results = []
+                            # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
+                            if len(input_bytes) >= 2:
+                                batch = True
+                            decrypted_shares = []
 
                             for i in range(len(input_bytes)):
                                 try:
@@ -276,23 +279,24 @@ class TaskManager:
                                         self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
 
                                     # Run distributed decryption algorithm on the received encrypted sample
-                                    decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
+                                    decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
 
-                                    # Set the model and input accordingly
-                                    self.set_model(analysis_id, analysis_type, decrypted_shares)
-
-                                    # Run the inference on the single sample
-                                    self.run_inference(analysis_id)
-
-                                    # Read and decode boolean shares in field from the Persistence file
-                                    shares_to_encrypt = self.read_shares(analysis_id)
-
-                                    results += shares_to_encrypt
-                                
                                 except Exception as e:
                                     if test:
                                         raise e
                                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+
+                            # Set the model and input accordingly
+                            self.set_model(analysis_id, analysis_type, decrypted_shares)
+
+                            # Run the inference on the single sample
+                            self.run_inference(analysis_id, program='heartbeat_inference_demo_batched_2')
+
+                            # Read and decode boolean shares in field from the Persistence file
+                            shares_to_encrypt = self.read_shares(analysis_id, number_of_shares=5*len(input_bytes))
+
+                            results += shares_to_encrypt
+                                
                             
                             # Run distributed encryption on the concataneted final result
                             encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
