@@ -5,6 +5,8 @@ import json
 import secrets
 import subprocess
 import base64
+import threading
+import traceback
 
 from pathlib import Path
 from math import log2, ceil
@@ -20,6 +22,58 @@ from selenium.webdriver.firefox.options import Options
 
 from key_share import MpcPartyKeys, decrypt_key_share, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig, dist_enc, dist_dec
+
+class ExceptionHookContextManager:
+    """ 
+    Context manager that will raise an exception if an uncaught exception terminated a thread that is started and joined within the context.
+
+    Usage:
+    t = Thread(target=lambda: <some exception raised here>)
+    with ExceptionHookContextManager():
+        t.start()
+        # ...
+        t.join()
+    # exception will be raised at this point after the context manager exited
+    """
+
+    def __init__(self):
+        self.old_hook = None
+        self.uncaught_exceptions = list()
+    
+    def __enter__(self):
+        # register myself as excepthook but keep the old one around
+        self.old_hook = threading.excepthook
+        threading.excepthook = self.hook
+    
+    def hook(self, args):
+        # called when an uncaught exception terminates the thread
+        self.uncaught_exceptions.append((args.exc_type, args.exc_value, args.exc_traceback))
+    
+    def __exit__(self, *exc_args):
+        # register the old hook
+        threading.excepthook = self.old_hook
+        del self.old_hook
+        # check if there are exceptions
+        if len(self.uncaught_exceptions) > 0:
+            for e_type, e_value, e_traceback in self.uncaught_exceptions:
+                print(f"Uncaught exception in other thread: {e_type} {e_value}")
+                traceback.print_tb(e_traceback)
+            del self.uncaught_exceptions # to prevent reference cycles
+            raise Exception("Uncaught exception in other thread, see trace above")
+
+def exception_check():
+    """ 
+    Context manager that will raise an exception if an uncaught exception terminated a thread that is started and joined within the context.
+
+    Usage:
+    t = Thread(target=lambda: <some exception raised here>)
+    with exception_check():
+        t.start()
+        # ...
+        t.join()
+    # exception will be raised at this point after the context manager exited
+    """
+    return ExceptionHookContextManager()
 
 class TestDecryptKeyShare(unittest.TestCase):
     @staticmethod
