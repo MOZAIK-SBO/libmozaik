@@ -148,8 +148,8 @@ class TaskManager:
                 result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
                                     capture_output=True, text=True, check=False, cwd='MP-SPDZ')
             
-            print("Captured Output:", result.stdout)
-            print("Captured Error Output:", result.stderr)
+            # print("Captured Output:", result.stdout)
+            # print("Captured Error Output:", result.stderr)
             
             result.check_returncode()
         except subprocess.CalledProcessError as e:
@@ -163,9 +163,20 @@ class TaskManager:
             Str: status of the subprocess call ("OK" or exception)
         """
         try:
-            subprocess.run(['./Fake-Offline.x', '3', '-lgp', '64'], capture_output=True, text=False, check=True, cwd='MP-SPDZ')
+            print("Running the offline phase...")
+            result = subprocess.run(
+                ['./Fake-Offline.x', '3', '-lgp', '64'],
+                capture_output=True, text=True, check=True, cwd='MP-SPDZ'
+            )
+            print("Command executed.")
+            print("Standard Output:", result.stdout)
+            print("Standard Error:", result.stderr)
+
         except subprocess.CalledProcessError as e:
-            return e
+            print("Command failed with error code:", e.returncode)
+            print("Command output:", e.output)
+            print("Command error:", e.stderr)
+            raise e
         
         return "OK"
 

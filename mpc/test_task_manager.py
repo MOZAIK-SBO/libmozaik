@@ -183,8 +183,7 @@ class TestTaskManager(unittest.TestCase):
         # Run the offline phase
         result = self.task_manager.run_offline()
 
-        print(result.stdout)
-        print(result.stderr)
+        print(result)
         
         # Check if the process returned "OK"
         self.assertEqual(result, "OK")
