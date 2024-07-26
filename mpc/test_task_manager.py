@@ -179,9 +179,12 @@ class TestTaskManager(unittest.TestCase):
             if os.path.isdir(folder):
                 shutil.rmtree(folder)
 
-    def test_run_offline_creates_folders(self):
+    def test_run_offline(self):
         # Run the offline phase
         result = self.task_manager.run_offline()
+
+        print(result.stdout)
+        print(result.stderr)
         
         # Check if the process returned "OK"
         self.assertEqual(result, "OK")
