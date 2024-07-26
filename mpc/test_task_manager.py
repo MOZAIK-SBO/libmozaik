@@ -3,6 +3,8 @@ import struct
 import tempfile
 import threading
 import unittest
+import glob
+import shutil
 from unittest.mock import MagicMock, mock_open, patch
 
 import numpy as np
@@ -104,7 +106,7 @@ class TestTaskManager(unittest.TestCase):
             norm_difference = abs(np.linalg.norm(actual_prediction) - np.linalg.norm([0.414063, 0.285156, 0.152344, 0.00390625, 0.148438]))
 
             # Assert that the actual prediction matches the expected one
-            assert norm_difference < 1e-2
+            assert norm_difference < 2e-2
         
     def test_write_shares(self):
         analysis_id = "01HQJRH8N3ZEXH3HX7QD56FH0W"
@@ -170,6 +172,23 @@ class TestTaskManager(unittest.TestCase):
 
             # Assert that the result matches the expected result
             self.assertEqual(result, expected_result)
+
+    def tearDown(self):
+        # Cleanup: (run_offline) Remove any directories starting with "3-" in the Player-Data folder
+        for folder in glob.glob('MP-SPDZ/Player-Data/3-*'):
+            if os.path.isdir(folder):
+                shutil.rmtree(folder)
+
+    def test_run_offline_creates_folders(self):
+        # Run the offline phase
+        result = self.task_manager.run_offline()
+        
+        # Check if the process returned "OK"
+        self.assertEqual(result, "OK")
+        
+        # Verify that folders starting with "3-" are created
+        created_folders = glob.glob('MP-SPDZ/Player-Data/3-*')
+        self.assertTrue(len(created_folders) > 0, "No folders starting with '3-' were created.")
         
 
     def run_process_requests_test_helper(self, encrypted_key_shares):

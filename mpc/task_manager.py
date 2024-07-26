@@ -131,19 +131,22 @@ class TaskManager:
             self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
 
     
-    def run_inference(self, analysis_id, program = 'heartbeat_inference_demo'):
+    def run_inference(self, analysis_id, program='heartbeat_inference_demo', online_only=False):
         """
         Run the ML inference in MP-SPDZ.
 
         Arguments:
             analysis_id (str): The analysis ID.
             program (str, optional): The program to run. Defaults to 'heartbeat_inference_demo'.
+            online_only (bool, optional): Whether to run the online phase only (make sure to run offline before)
         """
         try:
-            # print("Starting computation")
-            result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
+            if online_only:
+                result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-F', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
                                     capture_output=True, text=True, check=False, cwd='MP-SPDZ')
-            # print("Finished computation")
+            else:
+                result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
+                                    capture_output=True, text=True, check=False, cwd='MP-SPDZ')
             
             print("Captured Output:", result.stdout)
             print("Captured Error Output:", result.stderr)
@@ -151,6 +154,20 @@ class TaskManager:
             result.check_returncode()
         except subprocess.CalledProcessError as e:
             self.error_in_task(analysis_id, 500, f"Error running program {e}")
+
+    def run_offline(self):
+        """
+        Run the offline phase for malicious-rep-ring-party.x
+
+        Returns: 
+            Str: status of the subprocess call ("OK" or exception)
+        """
+        try:
+            subprocess.run(['./Fake-Offline.x', '3', '-lgp', '64'], capture_output=True, text=False, check=True, cwd='MP-SPDZ')
+        except subprocess.CalledProcessError as e:
+            return e
+        
+        return "OK"
 
     def read_model_from_file(self, file_path):
         """
