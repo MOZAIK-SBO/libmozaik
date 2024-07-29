@@ -131,26 +131,54 @@ class TaskManager:
             self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
 
     
-    def run_inference(self, analysis_id, program = 'heartbeat_inference_demo'):
+    def run_inference(self, analysis_id, program='heartbeat_inference_demo', online_only=False):
         """
         Run the ML inference in MP-SPDZ.
 
         Arguments:
             analysis_id (str): The analysis ID.
             program (str, optional): The program to run. Defaults to 'heartbeat_inference_demo'.
+            online_only (bool, optional): Whether to run the online phase only (make sure to run offline before)
         """
         try:
-            # print("Starting computation")
-            result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
+            if online_only:
+                result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-F', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
                                     capture_output=True, text=True, check=False, cwd='MP-SPDZ')
-            # print("Finished computation")
+            else:
+                result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
+                                    capture_output=True, text=True, check=False, cwd='MP-SPDZ')
             
-            print("Captured Output:", result.stdout)
-            print("Captured Error Output:", result.stderr)
+            # print("Captured Output:", result.stdout)
+            # print("Captured Error Output:", result.stderr)
             
             result.check_returncode()
         except subprocess.CalledProcessError as e:
             self.error_in_task(analysis_id, 500, f"Error running program {e}")
+
+    def run_offline(self):
+        """
+        Run the offline phase for malicious-rep-ring-party.x
+
+        Returns: 
+            Str: status of the subprocess call ("OK" or exception)
+        """
+        try:
+            print("Running the offline phase...")
+            result = subprocess.run(
+                ['./Fake-Offline.x', '3', '-lgp', '64'],
+                capture_output=True, text=True, check=True, cwd='MP-SPDZ'
+            )
+            print("Command executed.")
+            print("Standard Output:", result.stdout)
+            print("Standard Error:", result.stderr)
+
+        except subprocess.CalledProcessError as e:
+            print("Command failed with error code:", e.returncode)
+            print("Command output:", e.output)
+            print("Command error:", e.stderr)
+            raise e
+        
+        return "OK"
 
     def read_model_from_file(self, file_path):
         """
@@ -260,7 +288,10 @@ class TaskManager:
                             self.db.set_status(analysis_id, 'Starting computation')
                             results = []
 
-                            results = []
+                            # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
+                            if len(input_bytes) >= 2:
+                                batch = True
+                            decrypted_shares = []
 
                             for i in range(len(input_bytes)):
                                 try:
@@ -276,23 +307,24 @@ class TaskManager:
                                         self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
 
                                     # Run distributed decryption algorithm on the received encrypted sample
-                                    decrypted_shares = dist_dec(self.aes_config, user_id, key_share, sample) 
+                                    decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
 
-                                    # Set the model and input accordingly
-                                    self.set_model(analysis_id, analysis_type, decrypted_shares)
-
-                                    # Run the inference on the single sample
-                                    self.run_inference(analysis_id)
-
-                                    # Read and decode boolean shares in field from the Persistence file
-                                    shares_to_encrypt = self.read_shares(analysis_id)
-
-                                    results += shares_to_encrypt
-                                
                                 except Exception as e:
                                     if test:
                                         raise e
                                     self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+
+                            # Set the model and input accordingly
+                            self.set_model(analysis_id, analysis_type, decrypted_shares)
+
+                            # Run the inference on the single sample
+                            self.run_inference(analysis_id, program='heartbeat_inference_demo_batched_2')
+
+                            # Read and decode boolean shares in field from the Persistence file
+                            shares_to_encrypt = self.read_shares(analysis_id, number_of_shares=5*len(input_bytes))
+
+                            results += shares_to_encrypt
+                                
                             
                             # Run distributed encryption on the concataneted final result
                             encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)

@@ -61,7 +61,7 @@ for element in biases4:
 """
 Load input (query samples) from client
 """
-input_data = sfix.Tensor([1, 187])
+input_data = sfix.Tensor([128, 187])
 
 # i0_dim0 = sint.get_input_from(2)
 # i0_dim1 = sint.get_input_from(2)
@@ -85,7 +85,7 @@ layers = [
 
 model = tf.keras.models.Sequential(layers)
 
-model.build(input_data.sizes, 1)
+model.build(input_data.sizes, 128)
 
 #Update the weights and biases of each layer
 model.opt.layers[0].W = weights0

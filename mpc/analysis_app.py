@@ -74,7 +74,24 @@ class AnalysisApp:
                 task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
                 response = self.db.create_entry(analysis_id)
                 return jsonify(response[0]), response[1]
-                      
+            
+        @self.app.route('/offline/', methods=['GET'])
+        def prepare_offline():
+            """
+            Run the offline phase of the analysis to pre-process randomness.
+
+            Returns:
+                JSON: Result of the .
+            """
+            try:
+                result = task_manager.run_offline()
+            except Exception as e:
+                return jsonify(status = f'Failed with Exception: {e}'), 500
+            
+            if result != "OK":
+                return jsonify(status = f'Failed with Exception: {result}'), 500
+            else:
+                return jsonify(status = "OK"), 200          
 
         @self.app.route('/health', methods=['GET'])
         def health_check():

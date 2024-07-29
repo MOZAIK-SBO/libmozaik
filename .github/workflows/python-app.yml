@@ -34,9 +34,16 @@ jobs:
       run: |
         cd mpc/MP-SPDZ
         sudo apt-get install automake build-essential clang cmake git libboost-dev libboost-thread-dev libboost-filesystem-dev libboost-iostreams-dev libgmp-dev libntl-dev libsodium-dev libssl-dev libtool python3
-        make malicious-rep-ring-party.x
+        echo 'MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE' > CONFIG.mine
+        make Fake-Offline.x malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
+        ./compile.py -R64 heartbeat_inference_demo_batched_2
         Scripts/setup-ssl.sh 3
+    - name: Debug Fake-Offline.x
+      run: |
+        chmod +x mpc/MP-SPDZ/Fake-Offline.x
+        cd mpc/MP-SPDZ
+        ./Fake-Offline.x 3 -lgp 64
     #- name: Lint with flake8
     #  run: |
     #    # stop the build if there are Python syntax errors or undefined names

@@ -37,6 +37,10 @@ printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC" > CONFIG.mine
 print_green "Building malicious-rep-ring-party.x"
 make malicious-rep-ring-party.x || print_red_and_exit "Failed to build malicious-rep-ring-party.x"
 
+# Build Fake-Offline.x
+print_green "Building Fake-Offline.x"
+make Fake-Offline.x malicious-rep-ring-party.x || print_red_and_exit "Failed to build Fake-Offline.x"
+
 # Compile using compile.py
 print_green "Compiling heartbeat_inference_demo"
 ./compile.py -R64 heartbeat_inference_demo || print_red_and_exit "Compilation failed"

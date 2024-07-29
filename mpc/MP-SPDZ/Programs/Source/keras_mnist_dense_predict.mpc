@@ -27,7 +27,7 @@ layers = [
 
 model = tf.keras.models.Sequential(layers)
 
-model.build(test_samples.sizes)
+model.build(test_samples.sizes, 128)
 
 start = 0
 for var in model.trainable_variables:
