@@ -291,28 +291,33 @@ class TaskManager:
                             # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
                             if len(input_bytes) >= 2:
                                 batch = True
-                            decrypted_shares = []
 
-                            for i in range(len(input_bytes)):
-                                try:
-                                    # Define a sample = array of 187 elements
-                                    sample = input_bytes[i]
+                            dist_dec_args = []
+                            for sample in input_bytes:
+                                # Define a sample = array of 187 elements
+                                # Check whther sample is in the right format, if not, convert it to bytes
+                                if isinstance(sample, str):
+                                    # If sample is a string, assume it's a hexadecimal representation and convert to bytes
+                                    sample = bytes.fromhex(sample)
+                                elif not isinstance(sample, bytes):
+                                    # If key_share is not bytes or a string, raise an error
+                                    self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+                                    break
+                                dist_dec_args.append((user_id, key_share, sample))
+                            # run dist_dec on the batch
+                            try:
+                                decrypted_shares = dist_dec(self.aes_config, dist_dec_args)
+                            except Exception as e:
+                                if test:
+                                    raise e
+                                self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                            
+                            if any(x is None for x in decrypted_shares):
+                                # a decryption failed (due to tag mismatch)
+                                self.error_in_task(analysis_id, 500, f'Decryption of a sample failed.')
 
-                                    # Check whther sample is in the right format, if not, convert it to bytes
-                                    if isinstance(sample, str):
-                                        # If sample is a string, assume it's a hexadecimal representation and convert to bytes
-                                        sample = bytes.fromhex(sample)
-                                    elif not isinstance(sample, bytes):
-                                        # If key_share is not bytes or a string, raise an error
-                                        self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
-
-                                    # Run distributed decryption algorithm on the received encrypted sample
-                                    decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
-
-                                except Exception as e:
-                                    if test:
-                                        raise e
-                                    self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                            # flatten the batch
+                            decrypted_shares = [el for decrypt_res in decrypted_shares for el in decrypt_res]
 
                             # Set the model and input accordingly
                             self.set_model(analysis_id, analysis_type, decrypted_shares)
@@ -327,20 +332,21 @@ class TaskManager:
                                 
                             
                             # Run distributed encryption on the concataneted final result
-                            encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
+                            encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_id, analysis_id, analysis_type, key_share, results)])[0]
+                            if isinstance(encrypted_shares, bytes):
+                                status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())
+                                # Check if the store_result to Obelisk was succesful
+                                if status == "OK":
+                                    self.db.set_status(analysis_id, f"Sent")
+                                    # if not test:
+                                    #     self.db.reset_result(analysis_id)
+                                elif status == "Error":
+                                    self.error_in_task(analysis_id, response.status_code, response.text)
+                                elif status == "Exception":
+                                    self.error_in_task(analysis_id, 500,f'RequestException: {response}')
+                            else:
+                                self.error_in_task(analysis_id, 500, encrypted_shares)
 
-                            status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())
-
-                            # Check if the store_result to Obelisk was succesful
-                            if status == "OK":
-                                self.db.set_status(analysis_id, f"Sent")
-                                # if not test:
-                                #     self.db.reset_result(analysis_id)
-                            elif status == "Error":
-                                self.error_in_task(analysis_id, response.status_code, response.text)
-                            elif status == "Exception":
-                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
-                        
                             # Update status in the database
                             self.db.set_status(analysis_id, 'Completed')
 

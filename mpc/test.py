@@ -221,8 +221,10 @@ class TestRep3Aes(unittest.TestCase):
         rep3aes_config = Rep3AesConfig(config, path_to_bin)
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(party))
         
-        ct = dist_enc(rep3aes_config, keys, user_id, computation_id, analysis_type, key_share, message_share)
-        return_val[party] = ct
+        ct = dist_enc(rep3aes_config, keys, [(user_id, computation_id, analysis_type, key_share, message_share)])
+        assert len(ct) == 1
+        assert isinstance(ct[0], bytes)
+        return_val[party] = ct[0]
 
     @staticmethod
     def secret_share(data):
@@ -337,8 +339,10 @@ class TestRep3Aes(unittest.TestCase):
             assert False
         rep3aes_config = Rep3AesConfig(config, path_to_bin)
         
-        message_share = dist_dec(rep3aes_config, user_id, key_share, ct)
-        return_val[party] =  message_share
+        message_share = dist_dec(rep3aes_config, [(user_id, key_share, ct)])
+        assert len(message_share) == 1
+        assert message_share[0] is not None
+        return_val[party] =  message_share[0]
 
     def run_iot_protect(self, key, nonce, user_id, message):
         result = subprocess.run([self.iot_integration_bin, '--key', str(key.hex()), '--nonce', str(nonce.hex()), '--user-id', user_id, '--message', str(message.hex())], check=True, capture_output=True)

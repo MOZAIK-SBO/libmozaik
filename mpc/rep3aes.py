@@ -8,39 +8,43 @@ class Rep3AesConfig:
         self.config = path_to_config
         self.bin = path_to_bin
 
-def dist_enc(config, keys, user_id, computation_id, analysis_type, key_share, message_share):
+def dist_enc(config, keys, params):
     """
     Arguments
      - config: Rep3AesConfig
      - keys: MpcPartyKeys
-     - user_id: string
-     - computation_id: string
-     - analysis_type: string
-     - key_share: bytes-like of length 16 or 176
-     - message_share: list-like of 64-bit numbers in pairs (e.g. [[1,2], [3,4]])
+     - params: list of tuples
+        - user_id: string
+        - computation_id: string
+        - analysis_type: string
+        - key_share: bytes-like of length 16 or 176
+        - message_share: list-like of 64-bit numbers in pairs (e.g. [[1,2], [3,4]])
     
-    Returns ciphertext: bytes-like
+    Returns list of ciphertext (bytes) or error (string)
     """
-    if len(key_share) != 16 and len(key_share) != 176:
-        raise ValueError("Expected key_share to be 16 or 176 bytes")
-    for (i,(v1,v2)) in enumerate(message_share):
-        if abs(v1) >= 2**64 or abs(v2) >= 2**64:
-            raise ValueError(f'Message share at index {i} is larger than 64-bits: {v}')
-    (nonce, ad) = prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type)
-    command = [config.bin, '--config', config.config, 'encrypt', '--mode', 'AES-GCM-128']
-    args = {
-        'nonce': nonce.hex(),
-        'associated_data': ad.hex(),
-        'message_share': message_share
-    }
-    if len(key_share) == 16:
-        args['key_share'] = key_share.hex()
-    elif len(key_share) == 176:
-        args['key_schedule_share'] = key_share.hex()
-    else:
-        raise ValueError("Unsupported key_share length")
-    input_args = json.dumps(args)
+    input_args = []
+    for (user_id, computation_id, analysis_type, key_share, message_share) in params:
+        if len(key_share) != 16 and len(key_share) != 176:
+            raise ValueError("Expected key_share to be 16 or 176 bytes")
+        for (i,(v1,v2)) in enumerate(message_share):
+            if abs(v1) >= 2**64 or abs(v2) >= 2**64:
+                raise ValueError(f'Message share at index {i} is larger than 64-bits: {v}')
+        (nonce, ad) = prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type)
+        args = {
+            'nonce': nonce.hex(),
+            'associated_data': ad.hex(),
+            'message_share': message_share
+        }
+        if len(key_share) == 16:
+            args['key_share'] = key_share.hex()
+        elif len(key_share) == 176:
+            args['key_schedule_share'] = key_share.hex()
+        else:
+            raise ValueError("Unsupported key_share length")
+        input_args.append(args)
 
+    command = [config.bin, '--config', config.config, 'encrypt', '--mode', 'AES-GCM-128']
+    input_args = json.dumps(input_args)
     # print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
     if result.returncode != 0:
@@ -50,67 +54,83 @@ def dist_enc(config, keys, user_id, computation_id, analysis_type, key_share, me
         raise RuntimeError("Dist_enc failed")
     # try to parse the output of the program
     output = json.loads(result.stdout)
-    # this expects the following JSON
-    # { "ciphertext": hex-string, "error": error string }
-    if "ciphertext" in output and "error" not in output:
-        return bytes.fromhex(output["ciphertext"])
-    elif "error" in output:
-        raise RuntimeError(f"Dist_enc failed: {output['error']}")
-    else:
+    if not isinstance(output, list):
         raise RuntimeError(f'Unexpected output: {output}')
+    encryption_result = []
+    for output_part in output:
+        # this expects the following JSON
+        # { "ciphertext": hex-string, "error": error string }
+        if "ciphertext" in output_part and "error" not in output_part:
+            encryption_result.append(bytes.fromhex(output_part["ciphertext"]))
+        elif "error" in output_part:
+            encryption_result.append(output_part['error'])
+        else:
+            raise RuntimeError(f'Unexpected output: {output_part}')
+    return encryption_result
 
-def dist_dec(config, user_id, key_share, ciphertext):
+def dist_dec(config, args):
     """
     Arguments
     - config: Rep3AesConfig
-    - user_id: string
-    - key_share: bytes-like of length 16 or 176
-    - ciphertext: bytes-like
+    - args: list of (user_id, key_share, ciphertext) with
+        - user_id: string
+        - key_share: bytes-like of length 16 or 176
+        - ciphertext: bytes-like
 
-    Returns list of pairs of 64-bit numbers
+    Returns [res1, res2, ...] where
+    res is either a list of pairs of 64-bit numbers or None if the decryption failed for this argument
     """
-    if len(key_share) != 16 and len(key_share) != 176:
-        raise ValueError("Expected key_share to be 16 or 176 bytes")
-    if len(ciphertext) < 28:
-        raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
-    # print(key_share.hex(), ciphertext.hex())
-    nonce = ciphertext[:12]
-    ad = bytes(user_id, encoding='utf-8') + nonce
+    inputs = []
+    for (user_id, key_share, ciphertext) in args:
+        if len(key_share) != 16 and len(key_share) != 176:
+            raise ValueError("Expected key_share to be 16 or 176 bytes")
+        if len(ciphertext) < 28:
+            raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
+        # print(key_share.hex(), ciphertext.hex())
+        nonce = ciphertext[:12]
+        ad = bytes(user_id, encoding='utf-8') + nonce
+        args = {
+            'nonce': nonce.hex(),
+            'associated_data': ad.hex(),
+            'ciphertext': ciphertext[12:].hex()
+        }
+        if len(key_share) == 16:
+            args['key_share'] = key_share.hex()
+        elif len(key_share) == 176:
+            args['key_schedule_share'] = key_share.hex()
+        else:
+            raise ValueError("Unsupported key_share length")
+        inputs.append(args)
+
     command = [config.bin, '--config', config.config, 'decrypt', '--mode', 'AES-GCM-128']
-    args = {
-        'nonce': nonce.hex(),
-        'associated_data': ad.hex(),
-        'ciphertext': ciphertext[12:].hex()
-    }
-    if len(key_share) == 16:
-        args['key_share'] = key_share.hex()
-    elif len(key_share) == 176:
-        args['key_schedule_share'] = key_share.hex()
-    else:
-        raise ValueError("Unsupported key_share length")
-    input_args = json.dumps(args)
+    
+    input_args = json.dumps(inputs)
     # print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
     if result.returncode != 0:
-        print(f'Command "{" ".join(command)}" exited with code {result.returncode}')
+        command = " ".join(str(path) for path in command)
+        print(f'Command "{command}" exited with code {result.returncode}')
         print(result.stderr)
         print(result.stdout)
         raise RuntimeError("Dist_dec failed")
     # try to parse the output of the program
     output = json.loads(result.stdout)
-    if "message_share" in output and "error" not in output and "tag_error" not in output:
-        # message share should be a list of pairs of numbers
-        message_share = output["message_share"]
-        for m in message_share:
-            if len(m) != 2:
-                raise RuntimeError(f'Dist_dec output unexpected: {m}')
-            m1,m2 = m
-            if not isinstance(m1, int) or abs(m1) >= 2**64 or not isinstance(m2, int) or abs(m2) >= 2**64:
-                raise RuntimeError(f'Dist_dec output unexpected: {m1} {m2}')
-        return message_share
-    elif "tag_error" in output and "error" not in output:
-        raise RuntimeError("Dist_dec failed: Tag verification error")
-    elif "error" in output:
-        raise RuntimeError(f'Dist_dec failed: {output["error"]}')
-    else:
-        raise RuntimeError(f'Unexpected output: {output}')
+    outputs = []
+    for res in output:
+        if "message_share" in res and "error" not in res and "tag_error" not in res:
+            # message share should be a list of pairs of numbers
+            message_share = res["message_share"]
+            for m in message_share:
+                if len(m) != 2:
+                    raise RuntimeError(f'Dist_dec output unexpected: {m}')
+                m1,m2 = m
+                if not isinstance(m1, int) or abs(m1) >= 2**64 or not isinstance(m2, int) or abs(m2) >= 2**64:
+                    raise RuntimeError(f'Dist_dec output unexpected: {m1} {m2}')
+            outputs.append(message_share)
+        elif "tag_error" in res and "error" not in res:
+            outputs.append(None)
+        elif "error" in res:
+            raise RuntimeError(f'Dist_dec failed: {res["error"]}')
+        else:
+            raise RuntimeError(f'Unexpected output: {res}')
+    return outputs
