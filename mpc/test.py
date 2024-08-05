@@ -683,11 +683,11 @@ class IntegrationTest(unittest.TestCase):
         return_dict = dict()
 
         t1 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+                    args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
         t2 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+                    args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
         t3 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+                    args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()
@@ -733,11 +733,11 @@ class IntegrationTest(unittest.TestCase):
         return_dict = dict()
 
         t1 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+                    args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
         t2 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+                    args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
         t3 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+                    args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()

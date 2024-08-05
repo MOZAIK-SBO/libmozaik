@@ -22,6 +22,8 @@ def dist_enc(config, keys, params):
     
     Returns list of ciphertext (bytes) or error (string)
     """
+    batched = True # compute in batched mode except if a key share is given
+    # batched mode is currently only supported for key schedule shares
     input_args = []
     for (user_id, computation_id, analysis_type, key_share, message_share) in params:
         if len(key_share) != 16 and len(key_share) != 176:
@@ -37,12 +39,65 @@ def dist_enc(config, keys, params):
         }
         if len(key_share) == 16:
             args['key_share'] = key_share.hex()
+            batched = False
         elif len(key_share) == 176:
             args['key_schedule_share'] = key_share.hex()
         else:
             raise ValueError("Unsupported key_share length")
         input_args.append(args)
+    if batched:
+        return _dist_enc_call(config, input_args)
+    else:
+        output = list()
+        for arg in input_args:
+            output.append(_dist_enc_call(config, [arg])[0])
+        return output
 
+def dist_dec(config, args):
+    """
+    Arguments
+    - config: Rep3AesConfig
+    - args: list of (user_id, key_share, ciphertext) with
+        - user_id: string
+        - key_share: bytes-like of length 16 or 176
+        - ciphertext: bytes-like
+
+    Returns [res1, res2, ...] where
+    res is either a list of pairs of 64-bit numbers or None if the decryption failed for this argument
+    """
+    inputs = []
+    batched = True # compute in batched mode except if a key share is given
+    # batched mode is currently only supported for key schedule shares
+    for (user_id, key_share, ciphertext) in args:
+        if len(key_share) != 16 and len(key_share) != 176:
+            raise ValueError("Expected key_share to be 16 or 176 bytes")
+        if len(ciphertext) < 28:
+            raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
+        # print(key_share.hex(), ciphertext.hex())
+        nonce = ciphertext[:12]
+        ad = bytes(user_id, encoding='utf-8') + nonce
+        args = {
+            'nonce': nonce.hex(),
+            'associated_data': ad.hex(),
+            'ciphertext': ciphertext[12:].hex()
+        }
+        if len(key_share) == 16:
+            args['key_share'] = key_share.hex()
+            batched = False
+        elif len(key_share) == 176:
+            args['key_schedule_share'] = key_share.hex()
+        else:
+            raise ValueError("Unsupported key_share length")
+        inputs.append(args)
+    if batched:
+        return _dist_dec_call(config, inputs)
+    else:
+        output = list()
+        for arg in inputs:
+            output.append(_dist_dec_call(config, [arg])[0])
+        return output
+
+def _dist_enc_call(config, input_args):
     command = [config.bin, '--config', config.config, 'encrypt', '--mode', 'AES-GCM-128']
     input_args = json.dumps(input_args)
     # print(f'Running "{" ".join(command)}" with input {input_args}')
@@ -68,43 +123,10 @@ def dist_enc(config, keys, params):
             raise RuntimeError(f'Unexpected output: {output_part}')
     return encryption_result
 
-def dist_dec(config, args):
-    """
-    Arguments
-    - config: Rep3AesConfig
-    - args: list of (user_id, key_share, ciphertext) with
-        - user_id: string
-        - key_share: bytes-like of length 16 or 176
-        - ciphertext: bytes-like
-
-    Returns [res1, res2, ...] where
-    res is either a list of pairs of 64-bit numbers or None if the decryption failed for this argument
-    """
-    inputs = []
-    for (user_id, key_share, ciphertext) in args:
-        if len(key_share) != 16 and len(key_share) != 176:
-            raise ValueError("Expected key_share to be 16 or 176 bytes")
-        if len(ciphertext) < 28:
-            raise ValueError("Expected ciphertext to be at least 28 bytes (12 byte nonce + 16 byte tag)")
-        # print(key_share.hex(), ciphertext.hex())
-        nonce = ciphertext[:12]
-        ad = bytes(user_id, encoding='utf-8') + nonce
-        args = {
-            'nonce': nonce.hex(),
-            'associated_data': ad.hex(),
-            'ciphertext': ciphertext[12:].hex()
-        }
-        if len(key_share) == 16:
-            args['key_share'] = key_share.hex()
-        elif len(key_share) == 176:
-            args['key_schedule_share'] = key_share.hex()
-        else:
-            raise ValueError("Unsupported key_share length")
-        inputs.append(args)
-
+def _dist_dec_call(config, input_args):
     command = [config.bin, '--config', config.config, 'decrypt', '--mode', 'AES-GCM-128']
     
-    input_args = json.dumps(inputs)
+    input_args = json.dumps(input_args)
     # print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
     if result.returncode != 0:
