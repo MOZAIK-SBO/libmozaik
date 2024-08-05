@@ -698,6 +698,8 @@ class IntegrationTest(unittest.TestCase):
 
         for i in range(3):
             res_i = return_dict[i]
+            assert len(res_i) == 1
+            res_i = res_i[0]
             res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
@@ -748,6 +750,8 @@ class IntegrationTest(unittest.TestCase):
 
         for i in range(3):
             res_i = return_dict[i]
+            assert len(res_i) == 1
+            res_i = res_i[0]
             res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
