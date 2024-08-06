@@ -42,13 +42,6 @@ class AnalysisAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(b'"type":"COMPLETED"' in response.data)
 
-    def test_get_analysis_status_route(self):
-        self.app.db.create_entry('01HQJRFE0352Y5Y98VFTHEBS0X')
-        self.app.db.set_status('01HQJRFE0352Y5Y98VFTHEBS0X', 'Sent 1 out of 2')
-        response = self.client.get('/status/01HQJRFE0352Y5Y98VFTHEBS0X')
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(b'"type":"RUNNING"' in response.data)
-
     def test_get_analysis_status_route_unknown_id(self):
         response = self.client.get('/status/01HQJRGC0ZJ2Z63JZPYSQ3SRSF')
         self.assertEqual(response.status_code, 400)

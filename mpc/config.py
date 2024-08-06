@@ -1,5 +1,22 @@
 import tomli as tomllib
 
+DEBUG = False
+
+class ProcessException(Exception):
+    """Custom exception class for errors."""
+    def __init__(self, analysis_id, code, message):
+        super().__init__(message)
+        self.analysis_id = analysis_id
+        self.code = code
+        self.message = message
+
+        if DEBUG:
+            print(f"DEBUG MODE: Exception Raised - {self.code} - {self.message}")
+
+    def __str__(self):
+        return f"{self.code} - {self.message}"
+    
+
 class Config:
     """
     Config class manages configuration settings.

@@ -4,7 +4,7 @@ import ulid
 from flask import Flask, render_template, jsonify, request, abort
 from flask_sslify import SSLify
 
-from config import Config
+from config import Config, DEBUG
 from database import Database
 from rep3aes import Rep3AesConfig
 from task_manager import TaskManager
@@ -147,12 +147,7 @@ class AnalysisApp:
             
             elif status.startswith('Completed'):
                 # If it starts with 'Completed', return 'Completed'
-                return jsonify(type="COMPLETED", details = "Sending data to Obelisk"), 200
-            
-            elif status.startswith('Sent'):
-                # If it starts with 'Sent', return 'COMPLETED' 
-                # self.db.delete_entry(analysis_id)
-                return jsonify(type="RUNNING", details = f"Some computations completed and results were successfully sent to Obelisk. {status}"), 200
+                return jsonify(type="COMPLETED", details = "Computation completed and results were stored successfully in Obelsik."), 200
 
             elif not status.strip():
                 # If it's empty, return 'FAILED'
@@ -169,5 +164,5 @@ class AnalysisApp:
         context.load_cert_chain(self.config.CONFIG_SERVER_CERT, self.config.CONFIG_SERVER_KEY)
         context.verify_mode = ssl.CERT_REQUIRED
         context.load_verify_locations(self.config.CONFIG_CA_CERT)
-        self.app.run(debug=True, host='0.0.0.0', port=self.config.CONFIG_PORT, ssl_context=context)
+        self.app.run(debug=DEBUG, host='0.0.0.0', port=self.config.CONFIG_PORT, ssl_context=context)
         
