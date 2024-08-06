@@ -41,3 +41,7 @@ if __name__ == "__main__":
     
     with exception_check():
         TestTaskManager.process_test(task_manager1, ks_shares[config_index], config_index)
+
+    with exception_check():
+        response = task_manager1.run_offline()
+        assert response == "OK"

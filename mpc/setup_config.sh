@@ -31,11 +31,15 @@ printf "10.10.168.46:8000\n10.10.168.47:8000\n10.10.168.48:8000\n10.10.168.49:80
 
 # Write MP-SPDZ config file
 print_green "Writing CONFIG.mine file"
-printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC" > CONFIG.mine
+printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY" > CONFIG.mine
 
 # Build malicious-rep-ring-party.x
 print_green "Building malicious-rep-ring-party.x"
 make malicious-rep-ring-party.x || print_red_and_exit "Failed to build malicious-rep-ring-party.x"
+
+# Rewrite MP-SPDZ config file for insecure pre-processing
+print_green "Rewriting CONFIG.mine file for insecure pre-processing"
+printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE" > CONFIG.mine
 
 # Build Fake-Offline.x
 print_green "Building Fake-Offline.x"

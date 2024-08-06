@@ -161,25 +161,40 @@ class TaskManager:
             raise ProcessException(analysis_id, 500, f"Error running program {e}")
             # self.error_in_task(analysis_id, 500, f"Error running program {e}")
 
-    def run_offline(self):
+    def run_offline(self, distributed=True, offline_dest=['10.10.168.47:~/libmozaik/mpc/MP-SPDZ/Player-Data/', '10.10.168.48:~/libmozaik/mpc/MP-SPDZ/Player-Data/']):
         """
-        Run the offline phase for malicious-rep-ring-party.x
+        Run the offline phase for malicious-rep-ring-party.x. The offline phase is ruun by P0. 
+
+        Arguments:
+            distributed (bool, optional): Specify whether to run the offline phase on multiple servers(True) or locally(False)
+            offline_dest (list, optional): List of strings. Specify the destinations to send the pre-processed data to.
 
         Returns: 
             Str: status of the subprocess call ("OK" or exception)
         """
-        try:
-            result = subprocess.run(
-                ['./Fake-Offline.x', '3', '-lgp', '64'],
-                capture_output=True, text=True, check=True, cwd='MP-SPDZ'
-            )
-            if DEBUG:
-                print("Standard Output:", result.stdout)
-                print("Standard Error:", result.stderr)
+        if self.config.CONFIG_PARTY_INDEX == 0:
+            try:
+                result = subprocess.run(
+                    ['./Fake-Offline.x', '3', '-lgp', '64'],
+                    capture_output=True, text=True, check=True, cwd='MP-SPDZ'
+                )
+                if DEBUG:
+                    print("Standard Output:", result.stdout)
+                    print("Standard Error:", result.stderr)
 
-        except subprocess.CalledProcessError as e:
-            raise e
-        
+                if distributed:
+                    for dest in offline_dest:
+                        try:
+                            result = subprocess.run(
+                                f'scp -r MP-SPDZ/Player-Data/3-* {str(dest)}', shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                            )
+                            if DEBUG:
+                                print(f'Finished transfering data to: {dest}, Standard Output: {result.stdout.decode()}')
+                        except subprocess.CalledProcessError as e:
+                            raise e
+
+            except subprocess.CalledProcessError as e:
+                raise e
         return "OK"
 
     def read_model_from_file(self, file_path):
