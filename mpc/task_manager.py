@@ -275,31 +275,32 @@ class TaskManager:
                         # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
                         if len(input_bytes) >= 2:
                             batch = True
-                        decrypted_shares = []
 
-                        for i in range(len(input_bytes)):
-                            try:
-                                # Define a sample = array of 187 elements
-                                sample = input_bytes[i]
+                        dist_dec_args = []
+                        for sample in input_bytes:
+                            # Define a sample = array of 187 elements
+                            # Check whther sample is in the right format, if not, convert it to bytes
+                            if isinstance(sample, str):
+                                # If sample is a string, assume it's a hexadecimal representation and convert to bytes
+                                sample = bytes.fromhex(sample)
+                            elif not isinstance(sample, bytes):
+                                # If key_share is not bytes or a string, raise an error
+                                raise ProcessException(analysis_id, 500,f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+                            dist_dec_args.append((user_id, key_share, sample))
+                        # run dist_dec on the batch
+                        try:
+                            decrypted_shares = dist_dec(self.aes_config, dist_dec_args)
+                        except Exception as e:
+                            if test:
+                                raise e
+                            raise ProcessException(analysis_id, 500,f'An error occurred while processing requests: {e}')
+                        
+                        if any(x is None for x in decrypted_shares):
+                            # a decryption failed (due to tag mismatch)
+                            raise ProcessException(analysis_id, 500,f'Decryption of a sample failed.')
 
-                                # Check whther sample is in the right format, if not, convert it to bytes
-                                if isinstance(sample, str):
-                                    # If sample is a string, assume it's a hexadecimal representation and convert to bytes
-                                    print(sample)
-                                    sample = bytes.fromhex(sample)
-                                elif not isinstance(sample, bytes):
-                                    # If key_share is not bytes or a string, raise an error
-                                    raise ProcessException(analysis_id, 500,f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
-                                    # self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
-
-                                # Run distributed decryption algorithm on the received encrypted sample
-                                decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
-
-                            except Exception as e:
-                                if test:
-                                    raise e
-                                raise ProcessException(analysis_id, 500,f'An error occurred while processing requests: {e}')
-                                # self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                        # flatten the batch
+                        decrypted_shares = [el for decrypt_res in decrypted_shares for el in decrypt_res]
 
                         # Set the model and input accordingly
                         self.set_model(analysis_id, analysis_type, decrypted_shares)
@@ -312,11 +313,13 @@ class TaskManager:
 
                         results += shares_to_encrypt
                             
-                        
                         # Run distributed encryption on the concataneted final result
-                        encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
+                        encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_id, analysis_id, analysis_type, key_share, results)])[0]
 
-                        self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())                              
+                        if isinstance(encrypted_shares, bytes):
+                            self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())  
+                        else:
+                            raise ProcessException(analysis_id, 500,f'Result of dist_dec is in the wrong format (expected: bytes), encrypted shares: {encrypted_shares}')                         
                     
                         # Update status in the database
                         self.db.set_status(analysis_id, 'Completed')

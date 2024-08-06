@@ -213,7 +213,15 @@ class TestRep3Aes(unittest.TestCase):
         cls.iot_integration_bin = str(bin_path)
 
     @staticmethod
-    def run_dist_enc(return_val, party, path_to_bin, key_share, message_share, user_id, analysis_type, computation_id):
+    def run_dist_enc(return_val, party, path_to_bin, params):
+        """
+        - params: list of tuples
+            - user_id: string
+            - computation_id: string
+            - analysis_type: string
+            - key_share: bytes-like of length 16 or 176
+            - message_share: list-like of 64-bit numbers in pairs (e.g. [[1,2], [3,4]])
+        """
         if party in [0,1,2]:
             config = f'rep3aes/p{party+1}.toml'
         else:
@@ -221,7 +229,7 @@ class TestRep3Aes(unittest.TestCase):
         rep3aes_config = Rep3AesConfig(config, path_to_bin)
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(party))
         
-        ct = dist_enc(rep3aes_config, keys, user_id, computation_id, analysis_type, key_share, message_share)
+        ct = dist_enc(rep3aes_config, keys, params)
         return_val[party] = ct
 
     @staticmethod
@@ -271,9 +279,9 @@ class TestRep3Aes(unittest.TestCase):
 
         return_dict = dict()
 
-        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
-        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
-        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
+        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
+        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()
@@ -290,6 +298,9 @@ class TestRep3Aes(unittest.TestCase):
         # collect return values and check the ciphertext
         cts = [return_dict[i] for i in range(3)]
         for i, ct in enumerate(cts):
+            assert len(ct) == 1
+            ct = ct[0]
+            assert ct is not None
             self.assertEqual(ct.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
 
     def test_dist_enc_ks(self):
@@ -308,9 +319,9 @@ class TestRep3Aes(unittest.TestCase):
 
         return_dict = dict()
 
-        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
-        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
-        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
+        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
+        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()
@@ -327,17 +338,75 @@ class TestRep3Aes(unittest.TestCase):
         # collect return values and check the ciphertext
         cts = [return_dict[i] for i in range(3)]
         for i, ct in enumerate(cts):
+            assert len(ct) == 1
+            ct = ct[0]
+            assert ct is not None
             self.assertEqual(ct.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
+    
+    def test_dist_enc_ks_batched(self):
+        BATCHSIZE = 10
+        # the (plaintext) prediction is a vector of 5 64-bit values in little endian
+        result = [[secrets.randbelow(2**64) for _ in range(5)] for _ in range(BATCHSIZE)]
+        # as bytes
+        result_bytes = [TestRep3Aes.encode_ring_elements(pred) for pred in result]
+
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        computation_id = "28341f07-286a-4761-8fde-220b7be3d4cc"
+
+        # create key schedule and message shares
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
+        message_shares = [TestRep3Aes.secret_share_ring(pred) for pred in result]
+        args1 = [(user_id, computation_id, analysis_type, k1, m1) for (m1, _, _) in message_shares]
+        args2 = [(user_id, computation_id, analysis_type, k2, m2) for (_, m2, _) in message_shares]
+        args3 = [(user_id, computation_id, analysis_type, k3, m3) for (_, _, m3) in message_shares]
+
+        return_dict = dict()
+
+        t1 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 0, self.rep3aes_bin, args1])
+        t2 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 1, self.rep3aes_bin, args2])
+        t3 = Thread(target=TestRep3Aes.run_dist_enc, args=[return_dict, 2, self.rep3aes_bin, args3])
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+        expected_cts = []
+        expected_tags = []
+        (nonce, ad) = prepare_params_for_dist_enc(MpcPartyKeys(TestDecryptKeyShare.get_config(0)), user_id, computation_id, analysis_type)
+        for data in result_bytes:
+            instance = AES.new(key=TestDecryptKeyShare.expected_key, mode=AES.MODE_GCM, nonce=nonce)
+            instance.update(ad)
+            expected_ct, expected_tag = instance.encrypt_and_digest(data)
+            expected_cts.append(expected_ct)
+            expected_tags.append(expected_tag)
+
+        # collect return values and check the ciphertext
+        cts = [return_dict[i] for i in range(3)]
+        for i, ct in enumerate(cts):
+            assert len(ct) == BATCHSIZE
+            for cti, expected_ct, expected_tag in zip(ct, expected_cts, expected_tags):
+                assert cti is not None
+                self.assertEqual(cti.hex(), expected_ct.hex() + expected_tag.hex(), msg=f"Mismatch for the {i}-th ciphertext")
 
     @staticmethod
-    def run_dist_dec(return_val, party, path_to_bin, key_share, ct, user_id):
+    def run_dist_dec(return_val, party, path_to_bin, args):
+        """
+        args: list of (user_id, key_share, ciphertext) with
+        - user_id: string
+        - key_share: bytes-like of length 16 or 176
+        - ciphertext: bytes-like
+        """
         if party in [0, 1, 2]:
             config = f'rep3aes/p{party+1}.toml'
         else:
             assert False
         rep3aes_config = Rep3AesConfig(config, path_to_bin)
         
-        message_share = dist_dec(rep3aes_config, user_id, key_share, ct)
+        message_share = dist_dec(rep3aes_config, args)
         return_val[party] =  message_share
 
     def run_iot_protect(self, key, nonce, user_id, message):
@@ -358,9 +427,9 @@ class TestRep3Aes(unittest.TestCase):
         final_ct = self.run_iot_protect(TestDecryptKeyShare.expected_key, nonce, user_id, message)
 
         return_dict = dict()
-        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, k1, final_ct, user_id])
-        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, k2, final_ct, user_id])
-        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, k3, final_ct, user_id])
+        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, [(user_id, k1, final_ct)]])
+        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, [(user_id, k2, final_ct)]])
+        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, [(user_id, k3, final_ct)]])
 
         t1.start()
         t2.start()
@@ -373,6 +442,15 @@ class TestRep3Aes(unittest.TestCase):
         m1 = return_dict[0]
         m2 = return_dict[1]
         m3 = return_dict[2]
+        assert len(m1) == 1
+        assert len(m2) == 1
+        assert len(m3) == 1
+        m1 = m1[0]
+        m2 = m2[0]
+        m3 = m3[0]
+        assert m1 is not None
+        assert m2 is not None
+        assert m3 is not None
         assert len(m1) == 187
         assert len(m2) == 187
         assert len(m3) == 187
@@ -397,9 +475,9 @@ class TestRep3Aes(unittest.TestCase):
         final_ct = self.run_iot_protect(TestDecryptKeyShare.expected_key, nonce, user_id, message)
 
         return_dict = dict()
-        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, k1, final_ct, user_id])
-        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, k2, final_ct, user_id])
-        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, k3, final_ct, user_id])
+        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, [(user_id, k1, final_ct)]])
+        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, [(user_id, k2, final_ct)]])
+        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, [(user_id, k3, final_ct)]])
 
         t1.start()
         t2.start()
@@ -412,6 +490,15 @@ class TestRep3Aes(unittest.TestCase):
         m1 = return_dict[0]
         m2 = return_dict[1]
         m3 = return_dict[2]
+        assert len(m1) == 1
+        assert len(m2) == 1
+        assert len(m3) == 1
+        m1 = m1[0]
+        m2 = m2[0]
+        m3 = m3[0]
+        assert m1 is not None
+        assert m2 is not None
+        assert m3 is not None
         assert len(m1) == 187
         assert len(m2) == 187
         assert len(m3) == 187
@@ -423,6 +510,60 @@ class TestRep3Aes(unittest.TestCase):
             assert m1[i][1] == m2[i][0]
             assert m2[i][1] == m3[i][0]
             self.assertEqual(ring_message[i], ( m1[i][0] + m2[i][0] + m3[i][0]) % 2**64, msg="Reconstructed message did not match expected message.")
+    
+    def test_dist_dec_with_ks_batched(self):
+        BATCHSIZE = 10
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        # create key schedule shares
+        k1, k2, k3 = TestRep3Aes.secret_share(TestDecryptKeyShare.expected_key_schedule)
+
+        # create a message of 187 64-bit values in little endian
+        ring_message = [[secrets.randbelow(2**64) for _ in range(187)] for _ in range(BATCHSIZE)]
+        message = [TestRep3Aes.encode_ring_elements(m) for m in ring_message]
+        nonce = bytes.fromhex('157316abe528fe29d4716781')
+        final_ct = [self.run_iot_protect(TestDecryptKeyShare.expected_key, nonce, user_id, m) for m in message]
+
+        args1 = [(user_id, k1, ct) for ct in final_ct]
+        args2 = [(user_id, k2, ct) for ct in final_ct]
+        args3 = [(user_id, k3, ct) for ct in final_ct]
+
+        return_dict = dict()
+        t1 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 0, self.rep3aes_bin, args1])
+        t2 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 1, self.rep3aes_bin, args2])
+        t3 = Thread(target=TestRep3Aes.run_dist_dec, args=[return_dict, 2, self.rep3aes_bin, args3])
+
+        t1.start()
+        t2.start()
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+        # reconstruct message shares
+        m1_batch = return_dict[0]
+        m2_batch = return_dict[1]
+        m3_batch = return_dict[2]
+
+        assert len(m1_batch) == BATCHSIZE
+        assert len(m2_batch) == BATCHSIZE
+        assert len(m3_batch) == BATCHSIZE
+
+        for (m1, m2, m3, expected) in zip(m1_batch, m2_batch, m3_batch, ring_message):
+            assert m1 is not None
+            assert m2 is not None
+            assert m3 is not None
+
+            assert len(m1) == 187
+            assert len(m2) == 187
+            assert len(m3) == 187
+
+            for i in range(187):
+                # check consistent
+                assert len(m1[i]) == 2 and len(m2[i]) == 2 and len(m3[i]) == 2
+                assert m1[i][0] == m3[i][1]
+                assert m1[i][1] == m2[i][0]
+                assert m2[i][1] == m3[i][0]
+                self.assertEqual(expected[i], ( m1[i][0] + m2[i][0] + m3[i][0]) % 2**64, msg="Reconstructed message did not match expected message.")
 
 class IntegrationTest(unittest.TestCase):
     __slots__ = ["opts_dict", "firefox_options", "firefox_driver", "rep3aes_bin"]
@@ -542,11 +683,11 @@ class IntegrationTest(unittest.TestCase):
         return_dict = dict()
 
         t1 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+                    args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
         t2 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+                    args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
         t3 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+                    args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()
@@ -557,6 +698,8 @@ class IntegrationTest(unittest.TestCase):
 
         for i in range(3):
             res_i = return_dict[i]
+            assert len(res_i) == 1
+            res_i = res_i[0]
             res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
@@ -592,11 +735,11 @@ class IntegrationTest(unittest.TestCase):
         return_dict = dict()
 
         t1 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 0, self.rep3aes_bin, k1, m1, user_id, analysis_type, computation_id])
+                    args=[return_dict, 0, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k1, m1)]])
         t2 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 1, self.rep3aes_bin, k2, m2, user_id, analysis_type, computation_id])
+                    args=[return_dict, 1, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k2, m2)]])
         t3 = Thread(target=TestRep3Aes.run_dist_enc,
-                    args=[return_dict, 2, self.rep3aes_bin, k3, m3, user_id, analysis_type, computation_id])
+                    args=[return_dict, 2, self.rep3aes_bin, [(user_id, computation_id, analysis_type, k3, m3)]])
 
         t1.start()
         t2.start()
@@ -607,6 +750,8 @@ class IntegrationTest(unittest.TestCase):
 
         for i in range(3):
             res_i = return_dict[i]
+            assert len(res_i) == 1
+            res_i = res_i[0]
             res_i_b64 = base64.b64encode(res_i).decode("ascii").rstrip("=")
             recon_i = self.reconstructResultHook(user_id, iot_key, p1_json, p2_json, p3_json, computation_id, analysis_type, res_i_b64)
             self.assertListEqual(list(result_bytes), list(recon_i))
