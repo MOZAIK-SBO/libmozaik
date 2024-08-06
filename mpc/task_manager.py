@@ -8,6 +8,8 @@ import time
 from mozaik_obelisk import MozaikObelisk
 from rep3aes import dist_dec, dist_enc
 from key_share import MpcPartyKeys, decrypt_key_share
+from config import DEBUG, ProcessException
+
 
 class TaskManager:
     """
@@ -87,7 +89,7 @@ class TaskManager:
                         file.write(packed_share)
                 file.flush()
         except Exception as e:
-            self.error_in_task(analysis_id, 500, f'Error writing into a file: {e}')
+            raise ProcessException(analysis_id, 500, f'Error writing into a file: {e}')
 
     def read_shares(self, analysis_id, number_of_shares=5):
         """
@@ -126,9 +128,11 @@ class TaskManager:
                     return output_shares
 
             except Exception as e:
-                self.error_in_task(analysis_id, 500, f"Unable to interpret the result: {e}")
+                raise ProcessException(analysis_id, 500, f"Unable to interpret the result: {e}")
+                # self.error_in_task(analysis_id, 500, f"Unable to interpret the result: {e}")
         else:
-            self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
+            raise ProcessException(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")
+            # self.error_in_task(analysis_id, 500, f"The output file does not exist: the file '{self.sharesfile}' does not exist.")  
 
     
     def run_inference(self, analysis_id, program='heartbeat_inference_demo', online_only=False):
@@ -148,12 +152,14 @@ class TaskManager:
                 result = subprocess.run(['Scripts/../malicious-rep-ring-party.x', '-v', '-ip', 'HOSTS', '-p', str(self.config.CONFIG_PARTY_INDEX), program],
                                     capture_output=True, text=True, check=False, cwd='MP-SPDZ')
             
-            # print("Captured Output:", result.stdout)
-            # print("Captured Error Output:", result.stderr)
+            if DEBUG:
+                print("Captured Output:", result.stdout)
+                print("Captured Error Output:", result.stderr)
             
             result.check_returncode()
         except subprocess.CalledProcessError as e:
-            self.error_in_task(analysis_id, 500, f"Error running program {e}")
+            raise ProcessException(analysis_id, 500, f"Error running program {e}")
+            # self.error_in_task(analysis_id, 500, f"Error running program {e}")
 
     def run_offline(self):
         """
@@ -163,19 +169,15 @@ class TaskManager:
             Str: status of the subprocess call ("OK" or exception)
         """
         try:
-            print("Running the offline phase...")
             result = subprocess.run(
                 ['./Fake-Offline.x', '3', '-lgp', '64'],
                 capture_output=True, text=True, check=True, cwd='MP-SPDZ'
             )
-            print("Command executed.")
-            print("Standard Output:", result.stdout)
-            print("Standard Error:", result.stderr)
+            if DEBUG:
+                print("Standard Output:", result.stdout)
+                print("Standard Error:", result.stderr)
 
         except subprocess.CalledProcessError as e:
-            print("Command failed with error code:", e.returncode)
-            print("Command output:", e.output)
-            print("Command error:", e.stderr)
             raise e
         
         return "OK"
@@ -220,9 +222,11 @@ class TaskManager:
                     model.append(input_pair[::-1])
                 self.write_shares(analysis_id, model)
             except Exception as e:
-                self.error_in_task(analysis_id, 400, f'An error occured while setting weights: {e}')
+                raise ProcessException(analysis_id, 500, f'An error occured while setting weights: {e}')
+                # self.error_in_task(analysis_id, 400, f'An error occured while setting weights: {e}')
         else:
-            self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
+            raise ProcessException(analysis_id, 500, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
+            # self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
 
 
     def error_in_task(self, analysis_id, code, message):
@@ -253,112 +257,82 @@ class TaskManager:
                     # Lock to ensure thread safety
                     with self.request_lock:
                         # Get the user data corresponding to the user at the requested indices
-                        status_get_data, response_get_data = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
-
-                        # Check if the get_data to Obelisk was succesful
-                        if status_get_data == "OK":
-                            input_bytes = response_get_data
-                        elif status_get_data == "Error":
-                            self.error_in_task(analysis_id, response_get_data.status_code, response_get_data.text)
-                        elif status_get_data == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {response_get_data}')  
+                        input_bytes = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
 
                         # Get the shares of the key 
-                        status_key_share, response_key_share = self.mozaik_obelisk.get_key_share(analysis_id)
-
-                        # Check if the get_key_share to Obelisk was succesful
-                        if status_key_share == "OK":
-                            encrypted_key_share = response_key_share
-                        elif status_key_share == "Error":
-                            self.error_in_task(analysis_id, response_key_share.status_code, response_key_share.text)
-                        elif status_key_share == "Exception":
-                            self.error_in_task(analysis_id, 500,f'RequestException: {response_key_share}')  
+                        encrypted_key_share = self.mozaik_obelisk.get_key_share(analysis_id)
 
                         try:
                             key_share = decrypt_key_share(self.keys, user_id, "AES-GCM-128", data_index, analysis_type, encrypted_key_share) 
                         except Exception as e:
-                            if test:
-                                raise e
-                            status_key_share = "Exception"
-                            self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
-
-                        if status_get_data == "OK" and status_key_share == "OK":
+                            raise ProcessException(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
+                            # self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
                         
-                            # Insert the status message into the database
-                            self.db.set_status(analysis_id, 'Starting computation')
-                            results = []
+                        # Insert the status message into the database
+                        self.db.set_status(analysis_id, 'Starting computation')
+                        results = []
 
-                            # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
-                            if len(input_bytes) >= 2:
-                                batch = True
-                            decrypted_shares = []
+                        # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
+                        if len(input_bytes) >= 2:
+                            batch = True
+                        decrypted_shares = []
 
-                            for i in range(len(input_bytes)):
-                                try:
-                                    # Define a sample = array of 187 elements
-                                    sample = input_bytes[i]
+                        for i in range(len(input_bytes)):
+                            try:
+                                # Define a sample = array of 187 elements
+                                sample = input_bytes[i]
 
-                                    # Check whther sample is in the right format, if not, convert it to bytes
-                                    if isinstance(sample, str):
-                                        # If sample is a string, assume it's a hexadecimal representation and convert to bytes
-                                        sample = bytes.fromhex(sample)
-                                    elif not isinstance(sample, bytes):
-                                        # If key_share is not bytes or a string, raise an error
-                                        self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+                                # Check whther sample is in the right format, if not, convert it to bytes
+                                if isinstance(sample, str):
+                                    # If sample is a string, assume it's a hexadecimal representation and convert to bytes
+                                    print(sample)
+                                    sample = bytes.fromhex(sample)
+                                elif not isinstance(sample, bytes):
+                                    # If key_share is not bytes or a string, raise an error
+                                    raise ProcessException(analysis_id, 500,f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+                                    # self.error_in_task(analysis_id, 500, f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
 
-                                    # Run distributed decryption algorithm on the received encrypted sample
-                                    decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
+                                # Run distributed decryption algorithm on the received encrypted sample
+                                decrypted_shares += dist_dec(self.aes_config, user_id, key_share, sample)
 
-                                except Exception as e:
-                                    if test:
-                                        raise e
-                                    self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
+                            except Exception as e:
+                                if test:
+                                    raise e
+                                raise ProcessException(analysis_id, 500,f'An error occurred while processing requests: {e}')
+                                # self.error_in_task(analysis_id, 500, f'An error occurred while processing requests: {e}')
 
-                            # Set the model and input accordingly
-                            self.set_model(analysis_id, analysis_type, decrypted_shares)
+                        # Set the model and input accordingly
+                        self.set_model(analysis_id, analysis_type, decrypted_shares)
 
-                            # Run the inference on the single sample
-                            self.run_inference(analysis_id, program='heartbeat_inference_demo_batched_2')
+                        # Run the inference on the single sample
+                        self.run_inference(analysis_id, program='heartbeat_inference_demo_batched_2')
 
-                            # Read and decode boolean shares in field from the Persistence file
-                            shares_to_encrypt = self.read_shares(analysis_id, number_of_shares=5*len(input_bytes))
+                        # Read and decode boolean shares in field from the Persistence file
+                        shares_to_encrypt = self.read_shares(analysis_id, number_of_shares=5*len(input_bytes))
 
-                            results += shares_to_encrypt
-                                
+                        results += shares_to_encrypt
                             
-                            # Run distributed encryption on the concataneted final result
-                            encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
-
-                            status, response = self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())
-
-                            # Check if the store_result to Obelisk was succesful
-                            if status == "OK":
-                                self.db.set_status(analysis_id, f"Sent")
-                                # if not test:
-                                #     self.db.reset_result(analysis_id)
-                            elif status == "Error":
-                                self.error_in_task(analysis_id, response.status_code, response.text)
-                            elif status == "Exception":
-                                self.error_in_task(analysis_id, 500,f'RequestException: {response}')                                   
                         
-                            # Update status in the database
-                            self.db.set_status(analysis_id, 'Completed')
+                        # Run distributed encryption on the concataneted final result
+                        encrypted_shares = dist_enc(self.aes_config, self.keys, user_id, analysis_id, analysis_type, key_share, results)
 
-                            # Remove the request from the queue after processing
-                            if test:
-                                break
-                            self.request_queue.task_done()
+                        self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())                              
+                    
+                        # Update status in the database
+                        self.db.set_status(analysis_id, 'Completed')
 
-                            del results
-                            del shares_to_encrypt
-                            del encrypted_shares
-                            del status
-                            del response
-                        else:
-                            print("Check status: Computation not started, error retrieving data from Obelisk.")
-                            self.request_queue.task_done()
+                        # Remove the request from the queue after processing
+                        if test:
+                            break
+                        self.request_queue.task_done()
+
+                        del results
+                        del shares_to_encrypt
+                        del encrypted_shares
+                        
                 else:
-                    self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
+                    raise ProcessException(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
+                    # self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
                 
                 # Bookeeping
                 del analysis_id
@@ -369,6 +343,6 @@ class TaskManager:
                 del encrypted_key_share
                 del key_share
 
-            except Exception as e:
-                    raise e
+            except ProcessException as e:
+                    self.error_in_task(analysis_id, e.code, f'An exception happened during the processing of the request: {str(e)}')
     

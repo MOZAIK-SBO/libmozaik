@@ -1,6 +1,7 @@
 import requests
 import base64
 import time
+from config import ProcessException
 
 class MozaikObelisk:
     """
@@ -111,15 +112,18 @@ class MozaikObelisk:
                 # Parse and return the user data from the JSON response
                 user_data = response.json().get('user_data')
                 if isinstance(user_data, list):
-                    return "OK", user_data
+                    return user_data
                 else:
-                    return "Error", "ERROR: User data is not in the expected format (array)"
+                    raise ProcessException(analysis_id, 500, f'ERROR: User data is not in the expected format (array)')
+                    # return "Error", "ERROR: User data is not in the expected format (array)"
             else:
                 # Return an error message if the request was not successful
-                return "Error", response
+                raise ProcessException(analysis_id, 500, f'ERROR: {response}')
+                # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            return "Exception", e
+            raise ProcessException(analysis_id, 500, f'ERROR: {e}')
+            # return "Exception", e
 
     def get_key_share(self, analysis_id):
         """
@@ -153,15 +157,18 @@ class MozaikObelisk:
                     key_share = bytes.fromhex(key_share)
                 elif not isinstance(key_share, bytes):
                     # If key_share is not bytes or a string, raise an error
-                    return "Error", f"ValueError: key_share obtained in wrong format: {type(key_share)}"
+                    raise ProcessException(analysis_id, 500, f"ValueError: key_share obtained in wrong format: {type(key_share)}")
+                    # return "Error", f"ValueError: key_share obtained in wrong format: {type(key_share)}"
                 
-                return "OK", key_share
+                return key_share
             else:
                 # Return an error message if the request was not successful
-                return "Error", response
+                raise ProcessException(analysis_id, 500, f"ERROR: {response}")
+                # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            return "Exception", e
+            raise ProcessException(analysis_id, 500, f"ERROR: {e}")
+            # return "Exception", e
 
     def store_result(self, analysis_id, user_id, result):
         """
@@ -192,13 +199,12 @@ class MozaikObelisk:
             response = requests.post(url, json=payload, headers={"authorization": self.auth_token})
 
             # Check if the request was successful (status code 200)
-            if response.status_code == 204:
-                # Parse and return any relevant information from the JSON response
-                return "OK", response
-            else:
+            if response.status_code != 204:
                 # Return an error message if the request was not successful
-                return "Error", response
+                raise ProcessException(analysis_id, 500, f"ERROR: {response}")
+                # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            return "Exception", e
+            raise ProcessException(analysis_id, 500, f"ERROR: {e}")
+            # return "Exception", e
 
