@@ -249,11 +249,15 @@ class TaskManager:
         Handle errors in a task.
 
         Arguments:
-            analysis_id (str): The analysis ID.
+            analysis_id (str or list): The analysis ID(s).
             code (int): The HTTP error code.
             message (str): The error message.
         """
-        self.db.set_status(analysis_id, f'ERROR:{code}:{message}')
+        if isinstance(analysis_id, list):
+            for aid in analysis_id:
+                self.db.set_status(aid, f'ERROR:{code}:{message}')
+        elif isinstance(analysis_id, str):
+            self.db.set_status(analysis_id, f'ERROR:{code}:{message}')
         with self.app.app_context():
             self.app.logger.error(f"Task: {analysis_id} Code {code}\n{message}")
 
@@ -267,100 +271,124 @@ class TaskManager:
         """
         while True:
             try:
-                analysis_id, user_id, analysis_type, data_index = self.request_queue.get()
+                analysis_ids, user_ids, analysis_type, data_indeces, online_only = self.request_queue.get()
                 if analysis_type == "Heartbeat-Demo-1":
                     # Lock to ensure thread safety
                     with self.request_lock:
                         # Get the user data corresponding to the user at the requested indices
-                        input_bytes = self.mozaik_obelisk.get_data(analysis_id, user_id, data_index)
+                        input_data = self.mozaik_obelisk.get_data(analysis_ids, user_ids, data_indeces)
 
                         # Get the shares of the key 
-                        encrypted_key_share = self.mozaik_obelisk.get_key_share(analysis_id)
+                        encrypted_key_shares = self.mozaik_obelisk.get_key_share(analysis_ids)
 
                         try:
-                            key_share = decrypt_key_share(self.keys, user_id, "AES-GCM-128", data_index, analysis_type, encrypted_key_share) 
-                        except Exception as e:
-                            raise ProcessException(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
-                            # self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
-                        
+                            assert len(user_ids) == len(input_data) == len(encrypted_key_shares)
+                        except AssertionError as e:
+                            raise ProcessException(analysis_ids, 500, f'The length of input_data: {len(input_data)} should match the length of key shares: {len(encrypted_key_shares)} which should match the number of user_ids received: {len(user_ids)}. {e}')
+
+                        key_shares = []
+                        for i, encrypted_key_share in enumerate(encrypted_key_shares):
+                            try:
+                                key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", data_indeces[i], analysis_type, encrypted_key_share)) 
+                            except Exception as e:
+                                raise ProcessException(analysis_ids[i], 500, f'An error occurred while decrypting key_share: {e}')
+                                # self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
+
                         # Insert the status message into the database
-                        self.db.set_status(analysis_id, 'Starting computation')
-                        results = []
-
-                        # THIS WILL NEED TO CHANGE ONCE WE KNOW HOW THE DATA IS DIFFERENTIATED BETWEEN BATCH AND SINGLE
-                        if len(input_bytes) >= 2:
-                            batch = True
-
+                        for analysis_id in analysis_ids:
+                            self.db.set_status(analysis_id, 'Starting computation')
+                        
                         dist_dec_args = []
-                        for sample in input_bytes:
-                            # Define a sample = array of 187 elements
-                            # Check whther sample is in the right format, if not, convert it to bytes
-                            if isinstance(sample, str):
-                                # If sample is a string, assume it's a hexadecimal representation and convert to bytes
-                                sample = bytes.fromhex(sample)
-                            elif not isinstance(sample, bytes):
-                                # If key_share is not bytes or a string, raise an error
-                                raise ProcessException(analysis_id, 500,f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
-                            dist_dec_args.append((user_id, key_share, sample))
+                        for i, user_samples in enumerate(input_data):
+                            for sample in user_samples:
+                                # Define a sample = array of 187 elements
+                                # Check whther sample is in the right format, if not, convert it to bytes
+                                if isinstance(sample, str):
+                                    # If sample is a string, assume it's a hexadecimal representation and convert to bytes
+                                    sample = bytes.fromhex(sample)
+                                elif not isinstance(sample, bytes):
+                                    # If key_share is not bytes or a string, raise an error
+                                    raise ProcessException(analysis_ids[i], 500,f'Could not convert input data to the right format. Sample is expected to be bytes or hex string.')
+                                dist_dec_args.append((user_ids[i], key_shares[i], sample))
+
+                        if DEBUG:
+                            print(f'The vector length of dist_dec_args: {len(dist_dec_args)} (for reference should be equal to the batch_size = the total number of received samples)')
+
+                        batch_size = len(dist_dec_args) 
+
+                        try:
+                            assert batch_size == 1 or batch_size == 2 or batch_size == 4 or batch_size == 64 or batch_size == 128
+                        except AssertionError as e:
+                            raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,64 and 128. {e}')
+
                         # run dist_dec on the batch
                         try:
                             decrypted_shares = dist_dec(self.aes_config, dist_dec_args)
                         except Exception as e:
                             if test:
                                 raise e
-                            raise ProcessException(analysis_id, 500,f'An error occurred while processing requests: {e}')
+                            raise ProcessException(analysis_ids, 500,f'An error occurred while processing requests: {e}')
                         
                         if any(x is None for x in decrypted_shares):
                             # a decryption failed (due to tag mismatch)
-                            raise ProcessException(analysis_id, 500,f'Decryption of a sample failed.')
+                            raise ProcessException(analysis_ids, 500,f'Decryption of a sample failed.')
 
                         # flatten the batch
                         decrypted_shares = [el for decrypt_res in decrypted_shares for el in decrypt_res]
 
                         # Set the model and input accordingly
-                        self.set_model(analysis_id, analysis_type, decrypted_shares)
+                        self.set_model(analysis_ids, analysis_type, decrypted_shares)
 
                         # Run the inference on the single sample
-                        self.run_inference(analysis_id, program='heartbeat_inference_demo_batched_2')
+                        self.run_inference(analysis_ids, program='heartbeat_inference_demo_batched_'+str(batch_size), online_only=online_only)
 
                         # Read and decode boolean shares in field from the Persistence file
-                        shares_to_encrypt = self.read_shares(analysis_id, number_of_shares=5*len(input_bytes))
+                        shares_to_encrypt = self.read_shares(analysis_ids, number_of_shares=5*batch_size)
 
-                        results += shares_to_encrypt
+                        # Unflatten the list of shares to match corresponding users and analyses
+                        index = 0
+                        shares_to_encypt_unflattened = []
+                        for user_samples in shares_to_encrypt:
+                            shares_to_encypt_unflattened.append(shares_to_encrypt[index:index + len(user_samples)*5])
+                            index += len(user_samples)*5
                             
                         # Run distributed encryption on the concataneted final result
-                        encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_id, analysis_id, analysis_type, key_share, results)])[0]
+                        encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_ids[i], analysis_ids[i], analysis_type, key_shares[i], shares_to_encypt_unflattened[i]) for i in range(len(user_ids))])
 
-                        if isinstance(encrypted_shares, bytes):
-                            self.mozaik_obelisk.store_result(analysis_id, user_id, encrypted_shares.hex())  
+                        if isinstance(encrypted_shares, list) and all(isinstance(encrypted_share, bytes) for encrypted_share in encrypted_shares):
+                            self.mozaik_obelisk.store_result(analysis_ids, user_ids, [encrypted_share.hex() for encrypted_share in encrypted_shares])  
                         else:
-                            raise ProcessException(analysis_id, 500,f'Result of dist_dec is in the wrong format (expected: bytes), encrypted shares: {encrypted_shares}')                         
+                            raise ProcessException(analysis_ids, 500,f'Result of dist_dec is in the wrong format (expected: bytes), encrypted shares: {encrypted_shares}')                         
                     
                         # Update status in the database
-                        self.db.set_status(analysis_id, 'Completed')
+                        for analysis_id in analysis_ids:
+                            self.db.set_status(analysis_id, 'Completed')
 
                         # Remove the request from the queue after processing
                         if test:
                             break
                         self.request_queue.task_done()
 
-                        del results
                         del shares_to_encrypt
+                        del shares_to_encypt_unflattened
                         del encrypted_shares
                         
                 else:
-                    raise ProcessException(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
+                    raise ProcessException(analysis_ids, 500, f'Invalid analysis_type: {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
                     # self.error_in_task(analysis_id, 400, f'Invalid analysis_type {analysis_type}. Current supported analysis_type is "Heartbeat-Demo-1".')
                 
                 # Bookeeping
-                del analysis_id
-                del user_id
+                del analysis_ids
+                del user_ids
                 del analysis_type
-                del data_index
-                del input_bytes
+                del data_indeces
+                del input_data
                 del encrypted_key_share
-                del key_share
+                del key_shares
+                del dist_dec_args
 
             except ProcessException as e:
-                    self.error_in_task(analysis_id, e.code, f'An exception happened during the processing of the request: {str(e)}')
+                if test:
+                    raise e
+                self.error_in_task(analysis_ids, e.code, f'An exception happened during the processing of the request: {str(e)}')
     

@@ -64,7 +64,6 @@ class Database:
                 ''', (analysis_id, 'Queuing'))
                 db_connection.commit()
                 db_connection.close()
-                return {"status": "Request added to the queue"}, 201
             else:
                 # If the entry exists, update it
                 db_cursor.execute('''
@@ -74,7 +73,6 @@ class Database:
                 ''', ('Queuing', analysis_id))
                 db_connection.commit()
                 db_connection.close()
-                return {"status": "A request with this ID had already been created, the previous result will be overwritten"}, 202
         except Exception as e:
             raise Exception(f"Error creating entry: {e}")
         finally:

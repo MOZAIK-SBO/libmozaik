@@ -77,11 +77,12 @@ class MozaikObelisk:
         Get data for inference from the Mozaik Obelisk.
 
         Arguments:
-            user_id (str) : The ID of the user.
-            data_index (list) : A list of 2 elements, starting and end index of the data requested.
+            analysis_id (list) : The list of ID(s) of the analyses(s).
+            user_id (list) : The list of ID(s) of the user(s).
+            data_index (list) : A list of lists of 2 elements, starting and end index of the data requested.
 
         Returns:
-            A tuple containing the status and the user data.
+            A list of lists containing the user data (each sublist corresponds to data from a different user_id).
         """
 
         # Check token expiry before making the request
@@ -130,10 +131,10 @@ class MozaikObelisk:
         Get key share from the Mozaik Obelisk. 
 
         Arguments:
-            analysis_id (str) : The ID of the analysis.
+            analysis_id (list) : The list of ID(s) of the analyses(s).
 
         Returns:
-            A tuple containing the status and the key share in bytes form.
+            A list containing the key shares in bytes form (each item corresponds to share for a different user_id).
         """
 
         # Check token expiry before making the request
@@ -175,9 +176,9 @@ class MozaikObelisk:
         POST method to store result in the Mozaik Obelisk service.
 
         Arguments:
-            analysis_id (str) : The ID of the analysis.
-            user_id (str) : The ID of the user.
-            result (str) : The result to store.
+            analysis_id (list) : The list of ID(s) of the analyses(s).
+            user_id (list) : The list of ID(s) of the user(s).
+            result (list) : List of results to store (each item corresponds to a ciphertext corresponding to result for a specific user_id).
 
         Returns:
             A tuple containing the status and the response.
