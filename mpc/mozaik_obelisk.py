@@ -179,9 +179,6 @@ class MozaikObelisk:
             analysis_id (list) : The list of ID(s) of the analyses(s).
             user_id (list) : The list of ID(s) of the user(s).
             result (list) : List of results to store (each item corresponds to a ciphertext corresponding to result for a specific user_id).
-
-        Returns:
-            A tuple containing the status and the response.
         """
         endpoint = f'/analysis/result/{analysis_id}'
 

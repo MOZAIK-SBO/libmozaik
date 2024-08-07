@@ -1,0 +1,112 @@
+program.use_trunc_pr = True
+# program.use_edabit(True)
+# program.use_split(3)
+
+import numpy as np
+
+sfix.set_precision(8,16)
+
+"""
+INSTRUCTIONS FOR BENCHMARK
+
+Run Data_prep.py in ML-Data folder for data preparation
+
+For our truncation set the -DOUR_TRUNC flag
+For ABY3 online phase set the -DABY3_MAL_TRUNC flag
+
+"""
+
+"""
+First, load the dimensions and weights from player 0
+"""
+weights0 = sfix.Tensor([187, 50])
+weights1 = sfix.Tensor([50, 50])
+weights2 = sfix.Tensor([50, 50])
+weights3 = sfix.Tensor([50, 50])
+weights4 = sfix.Tensor([50, 5])
+
+start = 0
+for element in weights0:
+    start = element.read_from_file(start)
+for element in weights1:
+    start = element.read_from_file(start)
+for element in weights2:
+    start = element.read_from_file(start)
+for element in weights3:
+    start = element.read_from_file(start)
+for element in weights4:
+    start = element.read_from_file(start)
+
+"""
+Second, load the dimensions and biases from player 1 + truevals
+"""
+
+biases0 = sfix.Tensor([1, 50])
+biases1 = sfix.Tensor([1, 50])
+biases2 = sfix.Tensor([1, 50])
+biases3 = sfix.Tensor([1, 50])
+biases4 = sfix.Tensor([1, 5])
+
+for element in biases0:
+    start = element.read_from_file(start)
+for element in biases1:
+    start = element.read_from_file(start)
+for element in biases2:
+    start = element.read_from_file(start)
+for element in biases3:
+    start = element.read_from_file(start)
+for element in biases4:
+    start = element.read_from_file(start)
+
+"""
+Load input (query samples) from client
+"""
+input_data = sfix.Tensor([1, 187])
+
+# i0_dim0 = sint.get_input_from(2)
+# i0_dim1 = sint.get_input_from(2)
+# input_data.input_from(2)
+
+for element in input_data:
+    start = element.read_from_file(start)
+
+
+
+from Compiler import ml
+tf = ml
+
+layers = [
+    tf.keras.layers.Dense(50, activation='relu'),
+    tf.keras.layers.Dense(50, activation='relu'),
+    tf.keras.layers.Dense(50, activation='relu'),
+    tf.keras.layers.Dense(50, activation='relu'),
+    tf.keras.layers.Dense(5, activation='softmax')
+]
+
+model = tf.keras.models.Sequential(layers)
+
+model.build(input_data.sizes, 1)
+
+#Update the weights and biases of each layer
+model.opt.layers[0].W = weights0
+model.opt.layers[1].W = weights1
+model.opt.layers[2].W = weights2
+model.opt.layers[3].W = weights3
+model.opt.layers[4].W = weights4
+model.opt.layers[0].b = biases0
+model.opt.layers[1].b = biases1
+model.opt.layers[2].b = biases2
+model.opt.layers[3].b = biases3
+model.opt.layers[4].b = biases4
+
+guesses = model.predict(input_data)
+
+# sfix.write_to_file(guesses[0])
+# sfix.write_to_file(guesses[1])
+
+print_ln('Prediction: %s', guesses[0].reveal())
+print_ln('Prediction: %s', guesses[1].reveal())
+
+@for_range(len(guesses))
+def _(i):
+    sfix.write_to_file(guesses[i])
