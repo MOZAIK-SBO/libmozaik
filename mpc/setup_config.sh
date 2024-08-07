@@ -43,11 +43,16 @@ printf "MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE" > CON
 
 # Build Fake-Offline.x
 print_green "Building Fake-Offline.x"
-make Fake-Offline.x malicious-rep-ring-party.x || print_red_and_exit "Failed to build Fake-Offline.x"
+make Fake-Offline.x || print_red_and_exit "Failed to build Fake-Offline.x"
 
 # Compile using compile.py
-print_green "Compiling heartbeat_inference_demo"
+print_green "Compiling heartbeat_inference_demo programs"
 ./compile.py -R64 heartbeat_inference_demo || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_1 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_2 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_4 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_64 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_128 || print_red_and_exit "Compilation failed"
 
 # Move deployment keys to rep3aes/keys directory
 print_green "Moving deployment keys to rep3aes/keys directory"

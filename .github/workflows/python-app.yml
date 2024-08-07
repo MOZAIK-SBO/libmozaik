@@ -37,13 +37,13 @@ jobs:
         echo 'MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE' > CONFIG.mine
         make Fake-Offline.x malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
-        ./compile.py -R64 heartbeat_inference_demo_batched_2
+        ./compile.py -R64 heartbeat_inference_demo_batched_4
         Scripts/setup-ssl.sh 3
-    - name: Debug Fake-Offline.x
-      run: |
-        chmod +x mpc/MP-SPDZ/Fake-Offline.x
-        cd mpc/MP-SPDZ
-        ./Fake-Offline.x 3 -lgp 64
+    # - name: Debug Fake-Offline.x
+    #   run: |
+    #     chmod +x mpc/MP-SPDZ/Fake-Offline.x
+    #     cd mpc/MP-SPDZ
+    #     ./Fake-Offline.x 3 -lgp 64
     #- name: Lint with flake8
     #  run: |
     #    # stop the build if there are Python syntax errors or undefined names

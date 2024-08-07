@@ -22,15 +22,15 @@ class AnalysisAppTests(unittest.TestCase):
     def test_analyse_route(self):
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
         with self.app.app.test_request_context('/analyse/', method='POST', headers=headers):
-            data={'analysis_id': '01HQJRGMVHY51W7ZV8S2TXRQ7N', 'user_id': '01HQJRH8N3ZEXH3HX7QD56FH0W', 'data_index': [1, 2], 'analysis_type': 'Heartbeat-Demo-1'}
+            data={'analysis_id': ['01HQJRGMVHY51W7ZV8S2TXRQ7N'], 'user_id': ['01HQJRH8N3ZEXH3HX7QD56FH0W'], 'data_index': [[1, 2]], 'analysis_type': 'Heartbeat-Demo-1'}
             response = self.client.post('/analyse/', json=data, headers=headers)
             self.assertEqual(response.status_code, 201)
-            self.assertTrue(b"Request added to the queue" in response.data)
+            self.assertTrue(b"Requests added to the queue" in response.data)
 
     def test_analyse_route_invalid_id(self):
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
         with self.app.app.test_request_context('/analyse/', method='POST', headers=headers):
-            data={'analysis_id': 'invalid_id', 'user_id': '01HQJRH8N3ZEXH3HX7QD56FH0W', 'data_index': [1, 2], 'analysis_type': 'Heartbeat-Demo-1'}
+            data={'analysis_id': ['invalid_id'], 'user_id': ['01HQJRH8N3ZEXH3HX7QD56FH0W'], 'data_index': [[1, 2]], 'analysis_type': 'Heartbeat-Demo-1'}
             response = self.client.post('/analyse/', json=data, headers=headers)
             self.assertEqual(response.status_code, 400)
             self.assertTrue(b"Invalid analysis_id" in response.data)

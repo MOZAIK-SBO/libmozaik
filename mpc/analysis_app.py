@@ -45,6 +45,12 @@ class AnalysisApp:
         def analyse():
             """
             Analyse route to handle analysis requests. Puts data into a TaskManager queue which automatically triggers processing.
+            Expects json encoded:
+             - analysis_id (list)
+             - user_id (list)
+             - data_index (list of lists)
+             - analysis_type (str)
+             - online_only (bool, optional)
 
             Returns:
                 JSON: The response containing the analysis status.
@@ -56,24 +62,35 @@ class AnalysisApp:
                     data = request.get_json()
                 
                     # Extract data fields
-                    analysis_id = data.get('analysis_id')
-                    user_id = data.get('user_id')
-                    data_index = data.get('data_index', [])
-                    user_key = data.get('user_key')
+                    analysis_ids = data.get('analysis_id', [])
+                    user_ids = data.get('user_id', [])
+                    data_indeces = data.get('data_index', [])
+                    user_keys = data.get('user_key')
                     analysis_type = data.get('analysis_type')
+                    online_only = data.get('offline', False)  # Extract offline parameter, default to False if not provided
                 except (ValueError, AttributeError) as e:
                     return jsonify(error=f"Error getting data from json POST request. Expecting analysis_id, user_id, data_index as an array, user_key and analysis_type. {e}"), 400
 
-                # Validate analysis_id as a UUIDv4
+                # Validate analysis_id as a ULID
                 try:
-                    ulid.from_str(analysis_id)
-                    # ulid.from_str(user_id)
+                    for analysis_id in analysis_ids:
+                        ulid.from_str(analysis_id)
+                        # ulid.from_str(user_id)
                 except ValueError as e:
                     return jsonify(error=f"Invalid analysis_id. Please provide a valid ULID. {e}"), 400
+                
+                try:
+                    assert len(analysis_ids) == len(user_ids) == len(data_indeces)
+                except AssertionError as e:
+                    return jsonify(error=f'The length of analysis_id, user_id and data_index lists should be equal. {e}'), 400
 
-                task_manager.request_queue.put((analysis_id, user_id, analysis_type, data_index)) 
-                response = self.db.create_entry(analysis_id)
-                return jsonify(response[0]), response[1]
+                task_manager.request_queue.put((analysis_ids, user_ids, analysis_type, data_indeces, online_only)) 
+                try: 
+                    for analysis_id in analysis_ids:
+                        self.db.create_entry(analysis_id)
+                except Exception as e:
+                    return jsonify(error=f'Database error when creating an entry: {e}'), 500
+                return jsonify(status='Requests added to the queue'), 201
             
         @self.app.route('/offline/', methods=['GET'])
         def prepare_offline():
