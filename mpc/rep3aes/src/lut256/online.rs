@@ -1,19 +1,16 @@
 use std::time::Instant;
 
 use itertools::izip;
-use rand_chacha::ChaCha20Rng;
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     slice::{ParallelSlice, ParallelSliceMut},
 };
-use sha2::Sha256;
 
 use crate::{
-    aes::GF8InvBlackBox,
-    network::task::{Direction, IoLayerOwned},
-    party::{error::MpcResult, ArithmeticBlackBox, MainParty},
-    share::{gf8::GF8, Field, FieldDigestExt, FieldRngExt, RssShare, RssShareVec},
+    aes::{AesVariant, GF8InvBlackBox}, chida::ChidaParty, share::{gf8::GF8, Field}, util::{mul_triple_vec::NoMulTripleRecording, ArithmeticBlackBox}
 };
+use crate::rep3_core::{network::task::{Direction, IoLayerOwned},
+party::{error::MpcResult, MainParty}, share::{RssShare, RssShareVec}};
 
 use super::{lut256_tables, offline, LUT256Party, RndOhv256Output};
 
@@ -22,15 +19,15 @@ impl GF8InvBlackBox for LUT256Party {
         self.inner.constant(value)
     }
 
-    fn do_preprocessing(&mut self, n_keys: usize, n_blocks: usize) -> MpcResult<()> {
-        let n_rnd_ohv_ks = 4 * 10 * n_keys; // 4 S-boxes per round, 10 rounds, 1 LUT per S-box
-        let n_rnd_ohv = 16 * 10 * n_blocks; // 16 S-boxes per round, 10 rounds, 1 LUT per S-box
+    fn do_preprocessing(&mut self, n_keys: usize, n_blocks: usize, variant: AesVariant) -> MpcResult<()> {
+        let n_rnd_ohv_ks = variant.n_ks_sboxes() * n_keys; // 1 LUT per S-box
+        let n_rnd_ohv = 16 * variant.n_rounds() * n_blocks; // 16 S-boxes per round, X rounds, 1 LUT per S-box
         let n_prep = n_rnd_ohv + n_rnd_ohv_ks;
         let mut prep =
             if self.inner.has_multi_threading() && 2 * n_prep > self.inner.num_worker_threads() {
-                offline::generate_rndohv256_mt(self.inner.as_party_mut(), n_prep)?
+                offline::generate_rndohv256_mt::<_, GF8>(self.inner.as_party_mut(), &mut NoMulTripleRecording,  n_prep)?
             } else {
-                offline::generate_rndohv256(self.inner.as_party_mut(), n_prep)?
+                offline::generate_rndohv256(self.inner.as_party_mut(), &mut NoMulTripleRecording, n_prep)?
             };
         if self.prep_ohv.is_empty() {
             self.prep_ohv = prep;
@@ -70,6 +67,10 @@ impl GF8InvBlackBox for LUT256Party {
         self.io().wait_for_completion();
         Ok(())
     }
+
+    fn main_party_mut(&mut self) -> &mut MainParty {
+        self.inner.as_party_mut()
+    }
 }
 
 fn lut256_mt(
@@ -106,20 +107,14 @@ fn lut256(si: &mut [GF8], sii: &mut [GF8], ciii: &[GF8], rnd_ohv: &[RndOhv256Out
     });
 }
 
-impl<F: Field> ArithmeticBlackBox<F> for LUT256Party
-where
-    ChaCha20Rng: FieldRngExt<F>,
-    Sha256: FieldDigestExt<F>,
-{
-    type Rng = ChaCha20Rng;
-    type Digest = Sha256;
+impl<F: Field> ArithmeticBlackBox<F> for LUT256Party {
 
     fn pre_processing(&mut self, n_multiplications: usize) -> MpcResult<()> {
-        self.inner.pre_processing(n_multiplications)
+        <ChidaParty as ArithmeticBlackBox<F>>::pre_processing(&mut self.inner, n_multiplications)
     }
 
     fn io(&self) -> &IoLayerOwned {
-        self.inner.io()
+        <ChidaParty as ArithmeticBlackBox<F>>::io(&self.inner)
     }
 
     fn constant(&self, value: F) -> RssShare<F> {
@@ -130,7 +125,7 @@ where
         self.inner.generate_random(n)
     }
 
-    fn generate_alpha(&mut self, n: usize) -> Vec<F> {
+    fn generate_alpha(&mut self, n: usize) -> impl Iterator<Item=F> {
         self.inner.generate_alpha(n)
     }
 
@@ -163,7 +158,7 @@ where
     }
 
     fn finalize(&mut self) -> MpcResult<()> {
-        self.inner.finalize()
+        <ChidaParty as ArithmeticBlackBox<F>>::finalize(&mut self.inner)
     }
 }
 
@@ -173,8 +168,7 @@ mod test {
         aes::{
             self,
             test::{
-                test_aes128_keyschedule_gf8, test_aes128_no_keyschedule_gf8,
-                test_inv_aes128_no_keyschedule_gf8, test_sub_bytes,
+                test_aes128_keyschedule_gf8, test_aes128_no_keyschedule_gf8, test_aes256_keyschedule_gf8, test_aes256_no_keyschedule_gf8, test_inv_aes128_no_keyschedule_gf8, test_sub_bytes
             },
         },
         lut256::test::LUT256Setup,
@@ -218,7 +212,7 @@ mod test {
         test_inv_aes128_no_keyschedule_gf8::<LUT256Setup, _>(100, Some(N_THREADS))
     }
 
-    #[test]
+    // #[test]
     fn create_table() {
         fn set_bit(vec: &mut [u64; 4], index: usize, b: u8) {
             let b = b as u64;
@@ -254,5 +248,21 @@ mod test {
             println!("\t{:?},", table[i]);
         }
         println!("];");
+    }
+
+    #[test]
+    fn aes256_keyschedule_lut256() {
+        test_aes256_keyschedule_gf8::<LUT256Setup, _>(None)
+    }
+
+    #[test]
+    fn aes_256_no_keyschedule_lut256() {
+        test_aes256_no_keyschedule_gf8::<LUT256Setup, _>(1, None)
+    }
+
+    #[test]
+    fn aes_256_no_keyschedule_lut256_mt() {
+        const N_THREADS: usize = 3;
+        test_aes256_no_keyschedule_gf8::<LUT256Setup, _>(100, Some(N_THREADS))
     }
 }

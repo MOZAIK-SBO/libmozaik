@@ -1,28 +1,33 @@
 #![allow(dead_code)]
-mod share;
-mod party;
-mod network;
+pub mod aes;
 mod gcm;
-mod chida;
+pub mod chida;
+pub mod furukawa;
+pub mod gf4_circuit;
+pub mod lut256;
+pub mod share;
+pub mod wollut16;
+pub mod wollut16_malsec;
+pub mod gf4_circuit_malsec;
+pub mod util;
+pub mod rep3_core;
 mod conversion;
-mod aes;
-mod furukawa;
-mod benchmark;
+mod mozaik;
 
 use core::slice;
 use std::{fmt::Display, io, path::PathBuf, str::FromStr, time::Duration};
 
-use aes::{AesKeyState, GF8InvBlackBox};
-use chida::{ChidaBenchmarkParty, ImplVariant};
+use aes::{AesKeyState, AesVariant, GF8InvBlackBox};
 use clap::{Parser, Subcommand};
 use conversion::{convert_boolean_to_ring, convert_ring_to_boolean, Z64Bool};
-use furukawa::FurukawaGCMParty;
 use gcm::{batch::{batch_aes128_gcm_decrypt_with_ks, batch_aes128_gcm_encrypt_with_ks, DecParam, EncParam}, gf128::GF128, Aes128GcmCiphertext, RequiredPrepAesGcm128};
 use itertools::{izip, repeat_n, Itertools};
-use network::{Config, ConnectedParty};
-use party::{error::{MpcError, MpcResult}, ArithmeticBlackBox};
+use mozaik::{MozaikAsParty, MozaikParty};
+use rep3_core::{network::{Config, ConnectedParty}, share::{HasZero, RssShare}};
+use rep3_core::party::error::{MpcError, MpcResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use share::{gf8::GF8, Field, RssShare};
+use share::gf8::GF8;
+use util::ArithmeticBlackBox;
 
 #[derive(Debug)]
 enum Rep3AesError {
@@ -340,7 +345,7 @@ fn try_unflatten_aes128_gcm_key_schedule(key_schedule: &Vec<RssShare<GF8>>) -> M
 }
 
 fn aes128_gcm_encrypt_key_params<Protocol>(party: &mut Protocol, iv: &[u8], key: &KeyParams<RssShare<GF8>>, message: &[RssShare<GF8>], associated_data: &[u8]) -> MpcResult<Aes128GcmCiphertext>
-where Protocol: ArithmeticBlackBox<Z64Bool> + ArithmeticBlackBox<GF8> + ArithmeticBlackBox<GF128> + GF8InvBlackBox
+where Protocol: ArithmeticBlackBox<GF128> + GF8InvBlackBox
 {
     match key {
         KeyParams::KeyShare(key_share) => gcm::aes128_gcm_encrypt(party, iv, &key_share, message, associated_data),
@@ -358,7 +363,7 @@ fn aes_gcm_128_enc<Protocol: ArithmeticBlackBox<Z64Bool> + ArithmeticBlackBox<GF
     let (message_share_si, message_share_sii): (Vec<_>, Vec<_>) = encrypt_args.message_share.into_iter().unzip();
     ArithmeticBlackBox::<Z64Bool>::pre_processing(party, 2*64*message_share_si.len())?;
     let prep_info = gcm::get_required_prep_for_aes_128_gcm(encrypt_args.associated_data.len(), message_share_si.len()*8);
-    GF8InvBlackBox::do_preprocessing(party, 1, prep_info.blocks)?;
+    GF8InvBlackBox::do_preprocessing(party, 1, prep_info.blocks, AesVariant::Aes128)?;
     ArithmeticBlackBox::<GF128>::pre_processing(party, prep_info.mul_gf128)?;
     let message_share = convert_ring_to_boolean(party, party_index, &message_share_si, &message_share_sii)?;
     let mut ct = aes128_gcm_encrypt_key_params(party, &encrypt_args.nonce, key_share, &message_share, &encrypt_args.associated_data)?;
@@ -388,7 +393,7 @@ fn batch_aes_gcm_128_enc<Protocol: ArithmeticBlackBox<Z64Bool> + ArithmeticBlack
         acc
     });
     
-    GF8InvBlackBox::do_preprocessing(party, 0, prep_info.blocks)?;
+    GF8InvBlackBox::do_preprocessing(party, 0, prep_info.blocks, AesVariant::Aes128)?;
     ArithmeticBlackBox::<GF128>::pre_processing(party, prep_info.mul_gf128)?;
 
     let (message_share_si, message_share_sii): (Vec<_>, Vec<_>) = encrypt_args.iter().flat_map(|arg| arg.message_share.iter().copied()).unzip();
@@ -488,7 +493,7 @@ fn batch_mozaik_decrypt<Protocol: ArithmeticBlackBox<GF8> + ArithmeticBlackBox<G
         acc.mul_gf128 += tmp.mul_gf128;
         acc
     });
-    GF8InvBlackBox::do_preprocessing(party, 0, prep_info.blocks)?;
+    GF8InvBlackBox::do_preprocessing(party, 0, prep_info.blocks, AesVariant::Aes128)?;
     ArithmeticBlackBox::<GF128>::pre_processing(party, prep_info.mul_gf128)?;
 
     // check that all ciphertexts have valid length
@@ -513,7 +518,7 @@ fn batch_mozaik_decrypt<Protocol: ArithmeticBlackBox<GF8> + ArithmeticBlackBox<G
     drop(key_share);
 
     let mut pt_lens = Vec::with_capacity(plaintexts.len());
-    let zero = RssShare::constant(party_index, GF8::ZERO);
+    let zero = GF8InvBlackBox::constant(party, GF8::ZERO);
     let pt_flat = plaintexts.into_iter().flat_map(|decrypt_res| {
         match decrypt_res {
             Some(pt) => {
@@ -561,7 +566,7 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
                         let connected = ConnectedParty::bind_and_connect(party_index, config, timeout)?;
                         let party_index = connected.i;
                         if cli.active {
-                            let mut party = FurukawaGCMParty::setup(connected, cli.threads)?;
+                            let mut party = MozaikAsParty::setup(connected, cli.threads, None)?;
                             if encrypt_args.len() == 1 {
                                 let encrypt_args = encrypt_args.into_iter().next().unwrap();
                                 let res = aes_gcm_128_enc(&mut party, party_index, encrypt_args);
@@ -571,7 +576,7 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
                                 batch_aes_gcm_128_enc(&mut party, party_index, encrypt_args)
                             }
                         }else{
-                            let mut party = ChidaBenchmarkParty::setup(connected, chida::ImplVariant::Simple, cli.threads)?;
+                            let mut party = MozaikParty::setup(connected, cli.threads, None)?;
                             if encrypt_args.len() == 1 {
                                 let encrypt_args = encrypt_args.into_iter().next().unwrap();
                                 let res = aes_gcm_128_enc(&mut party, party_index, encrypt_args);
@@ -593,7 +598,7 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
                         let connected = ConnectedParty::bind_and_connect(party_index, config, timeout)?;
                         let party_index = connected.i;
                         if cli.active {
-                            let mut party = FurukawaGCMParty::setup(connected, cli.threads)?;
+                            let mut party = MozaikAsParty::setup(connected, cli.threads, None)?;
                             if decrypt_args.len() == 1 {
                                 let decrypt_args = decrypt_args.into_iter().next().unwrap();
                                 let res = mozaik_decrypt(&mut party, party_index, decrypt_args);
@@ -603,7 +608,7 @@ fn execute_command<R: io::Read, W: io::Write>(cli: Cli, input_arg_reader: R, out
                                 batch_mozaik_decrypt(&mut party, party_index, decrypt_args)
                             }
                         }else{
-                            let mut party = ChidaBenchmarkParty::setup(connected, ImplVariant::Optimized, cli.threads)?;
+                            let mut party = MozaikParty::setup(connected, cli.threads, None)?;
                             if decrypt_args.len() == 1 {
                                 let decrypt_args = decrypt_args.into_iter().next().unwrap();
                                 let res = mozaik_decrypt(&mut party, party_index, decrypt_args);
@@ -635,7 +640,7 @@ mod rep3_aes_main_test {
     use itertools::{izip, Itertools};
     use rand::thread_rng;
 
-    use crate::{aes, conversion::test::secret_share_vector_ring, execute_command, gcm, share::{gf8::GF8, test::secret_share_vector, RssShare}, Cli, Commands, DecryptResult, EncryptResult, Mode};
+    use crate::{aes, conversion::test::secret_share_vector_ring, execute_command, gcm, rep3_core::share::RssShare, share::{gf8::GF8, test::secret_share_vector}, Cli, Commands, DecryptResult, EncryptResult, Mode};
 
 
     const KEY_SHARE_1: &str = "76c2488bd101fd2999a922d351707fcf";
@@ -653,8 +658,7 @@ mod rep3_aes_main_test {
 
     static PORT_LOCK: Mutex<()> = Mutex::new(());
 
-    #[test]
-    fn encrypt_aes_gcm_128() {
+    fn encrypt_aes_gcm_128_helper(active: bool) {
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
         let guard = PORT_LOCK.lock().unwrap();
 
@@ -671,7 +675,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Encrypt { mode: Mode::AesGcm128 }
@@ -711,7 +715,16 @@ mod rep3_aes_main_test {
     }
 
     #[test]
-    fn encrypt_aes_gcm_128_ks() {
+    fn encrypt_aes_gcm_128() {
+        encrypt_aes_gcm_128_helper(false);
+    }
+
+    #[test]
+    fn encrypt_aes_gcm_128_malicious() {
+        encrypt_aes_gcm_128_helper(true);
+    }
+
+    fn encrypt_aes_gcm_128_ks_helper(active: bool) {
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
         let guard = PORT_LOCK.lock().unwrap();
 
@@ -728,7 +741,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Encrypt { mode: Mode::AesGcm128 }
@@ -767,13 +780,22 @@ mod rep3_aes_main_test {
         drop(guard);        
     }
 
+    #[test]
+    fn encrypt_aes_gcm_128_ks() {
+        encrypt_aes_gcm_128_ks_helper(false);
+    }
+
+    #[test]
+    fn encrypt_aes_gcm_128_ks_malicious() {
+        encrypt_aes_gcm_128_ks_helper(true);
+    }
+
     fn additive_share_to_string(v: Vec<RssShare<GF8>>) -> String {
         let x = v.into_iter().map(|rss| rss.si.0).collect_vec();
         hex::encode(x)
     }
 
-    #[test]
-    fn encrypt_aes_gcm_128_ks_batched() {
+    fn encrypt_aes_gcm_128_ks_batched_helper(active: bool) {
         const BATCH_SIZE: usize = 64;
 
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
@@ -820,7 +842,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Encrypt { mode: Mode::AesGcm128 }
@@ -882,6 +904,16 @@ mod rep3_aes_main_test {
         }
     }
 
+    #[test]
+    fn encrypt_aes_gcm_128_ks_batched() {
+        encrypt_aes_gcm_128_ks_batched_helper(false);
+    }
+
+    #[test]
+    fn encrypt_aes_gcm_128_ks_batched_malicious() {
+        encrypt_aes_gcm_128_ks_batched_helper(true);
+    }
+
     fn aes128_gcm_dec_plain(key: &[u8], iv: &[u8], ad: &[u8], ct: &[u8]) -> Option<Vec<u8>> {
         let key = Key::<Aes128Gcm>::from_slice(key);
         let cipher = Aes128Gcm::new(&key);
@@ -900,64 +932,7 @@ mod rep3_aes_main_test {
         out
     }
 
-    //#[test] todo: implement malicius cut-and-choose for bool, then retry
-    fn encrypt_aes_gcm_128_malicious() {
-        // before running this test, make sure that the ports in p1/p2/p3.toml are free
-        let guard = PORT_LOCK.lock().unwrap();
-
-        let mut rng = thread_rng();
-        let (r1, r2, r3) = secret_share_vector_ring(&mut rng, &MESSAGE_RING);
-
-        let party_f = |i: usize, key_share: &'static str, message_share: (Vec<u64>, Vec<u64>)| {
-            move || {
-                let path = match i {
-                    0 => "p1.toml",
-                    1 => "p2.toml",
-                    2 => "p3.toml",
-                    _ => panic!()
-                };
-                let cli = Cli {
-                    config: PathBuf::from(path),
-                    active: true,
-                    timeout: None,
-                    threads: None,
-                    command: Commands::Encrypt { mode: Mode::AesGcm128 }
-                };
-
-                let list_of_numbers = message_share.0.into_iter().zip(message_share.1).map(|(vi, vii)| format!("[{}, {}]", vi, vii)).join(", ");
-
-                // prepare input arg
-                let input_arg = format!("{{\"key_share\": \"{}\", \"nonce\": \"{}\", \"associated_data\": \"{}\", \"message_share\": [{}]}}", key_share, NONCE, AD, list_of_numbers);
-                let mut output = BufWriter::new(Vec::new());
-                execute_command(cli, input_arg.as_bytes(), &mut output);
-
-                // check what is written to the output
-                let buf = output.into_inner().unwrap();
-                let res: EncryptResult = serde_json::from_slice(&buf).unwrap();
-
-                assert!(res.ciphertext.is_some());
-                assert!(res.error.is_none());
-                let ciphertext = res.ciphertext.unwrap();
-                
-                assert_eq!(ciphertext.len(), CT.len() + TAG.len());
-                assert_eq!(&ciphertext[..CT.len()], CT);
-                assert_eq!(&ciphertext[CT.len()..], TAG);
-            }
-        };
-
-        let h1 = thread::spawn(party_f(0, KEY_SHARE_1, (r1.clone(), r2.clone())));
-        let h2 = thread::spawn(party_f(1, KEY_SHARE_2, (r2, r3.clone())));
-        let h3 = thread::spawn(party_f(2, KEY_SHARE_3, (r3, r1)));
-
-        h1.join().unwrap();
-        h2.join().unwrap();
-        h3.join().unwrap();
-
-        drop(guard);        
-    }
-
-    #[test]
-    fn decrypt_aes_gcm_128() {
+    fn decrypt_aes_gcm_128_helper(active: bool) {
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
         let guard = PORT_LOCK.lock().unwrap();
 
@@ -971,7 +946,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Decrypt { mode: Mode::AesGcm128 }
@@ -1013,7 +988,16 @@ mod rep3_aes_main_test {
     }
 
     #[test]
-    fn decrypt_aes_gcm_128_ks() {
+    fn decrypt_aes_gcm_128() {
+        decrypt_aes_gcm_128_helper(false);
+    }
+
+    #[test]
+    fn decrypt_aes_gcm_128_malicious() {
+        decrypt_aes_gcm_128_helper(true);
+    }
+
+    fn decrypt_aes_gcm_128_ks_helper(active: bool) {
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
         let guard = PORT_LOCK.lock().unwrap();
 
@@ -1027,7 +1011,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Decrypt { mode: Mode::AesGcm128 }
@@ -1069,7 +1053,16 @@ mod rep3_aes_main_test {
     }
 
     #[test]
-    fn decrypt_aes_gcm_128_ks_batched() {
+    fn decrypt_aes_gcm_128_ks() {
+        decrypt_aes_gcm_128_ks_helper(false);
+    }
+
+    #[test]
+    fn decrypt_aes_gcm_128_ks_malicious() {
+        decrypt_aes_gcm_128_ks_helper(true);
+    }
+
+    fn decrypt_aes_gcm_128_ks_batched_helper(active: bool) {
         const BATCH_SIZE: usize = 64;
 
         // before running this test, make sure that the ports in p1/p2/p3.toml are free
@@ -1117,7 +1110,7 @@ mod rep3_aes_main_test {
                 };
                 let cli = Cli {
                     config: PathBuf::from(path),
-                    active: false,
+                    active,
                     timeout: None,
                     threads: None,
                     command: Commands::Decrypt { mode: Mode::AesGcm128 }
@@ -1175,5 +1168,15 @@ mod rep3_aes_main_test {
                 assert_eq!(m, s1.0.overflowing_add(s2.0).0.overflowing_add(s3.0).0);
             }
         }
+    }
+
+    #[test]
+    fn decrypt_aes_gcm_128_ks_batched() {
+        decrypt_aes_gcm_128_ks_batched_helper(false);
+    }
+
+    #[test]
+    fn decrypt_aes_gcm_128_ks_batched_malicious() {
+        decrypt_aes_gcm_128_ks_batched_helper(true);
     }
 }
