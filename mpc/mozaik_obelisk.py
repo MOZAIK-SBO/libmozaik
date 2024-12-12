@@ -72,7 +72,7 @@ class MozaikObelisk:
             self.auth_token = self.request_jwt_token(self.server_id, self.server_secret)
             self.token_timestamp = time.time()  # Update the token timestamp
 
-    def get_data(self, analysis_id, user_id, data_index):
+    def get_data(self, analysis_ids, user_ids, data_indeces):
         """
         Get data for inference from the Mozaik Obelisk.
 
@@ -90,19 +90,20 @@ class MozaikObelisk:
 
         # Construct the endpoint with the analysis ID
 
-        endpoint = f"/analysis/data/query/{analysis_id}"
+        endpoint = f"/analysis/data/query"
 
         # Prepare the request body
-        request_body = {
-            "user_id": user_id,
-            "data_index": data_index
+        payload = {
+            'analysis_id':analysis_ids,
+            "user_id": user_ids,
+            "data_index": data_indeces
         }
 
         # Make the POST request to the endpoint
         try:
             response = requests.post(
                 f"{self.base_url}{endpoint}",
-                json=request_body,
+                json=payload,
                 headers={
                     "authorization": self.auth_token  
                 }
@@ -115,18 +116,18 @@ class MozaikObelisk:
                 if isinstance(user_data, list):
                     return user_data
                 else:
-                    raise ProcessException(analysis_id, 500, f'ERROR: User data is not in the expected format (array)')
+                    raise ProcessException(analysis_ids, 500, f'ERROR: User data is not in the expected format (array)')
                     # return "Error", "ERROR: User data is not in the expected format (array)"
             else:
                 # Return an error message if the request was not successful
-                raise ProcessException(analysis_id, 500, f'ERROR: {response}')
+                raise ProcessException(analysis_ids, 500, f'ERROR: {response}')
                 # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            raise ProcessException(analysis_id, 500, f'ERROR: {e}')
+            raise ProcessException(analysis_ids, 500, f'ERROR: {e}')
             # return "Exception", e
 
-    def get_key_share(self, analysis_id):
+    def get_key_share(self, analysis_ids):
         """
         Get key share from the Mozaik Obelisk. 
 
@@ -140,38 +141,41 @@ class MozaikObelisk:
         # Check token expiry before making the request
         self.check_token()
 
-        endpoint = f'/mpc/keys/share/{analysis_id}'
+        endpoint = f'/mpc/keys/share'
 
         # Construct the full URL with parameters
         url = f'{self.base_url}{endpoint}'
 
+        payload = {
+            'analysis_id':analysis_ids,
+        }
+
         try:
             # Make the GET request
-            response = requests.get(url, headers={"authorization": self.auth_token})
+            response = requests.post(url, json=payload, headers={"authorization": self.auth_token})
 
             # Check if the request was successful (status code 200)
             if response.status_code == 200:
                 # Parse and return the user_data from the JSON response
-                key_share = response.json().get('key_share')
-                if isinstance(key_share, str):
-                    # If key_share is a string, assume it's a hexadecimal representation and convert to bytes
-                    key_share = bytes.fromhex(key_share)
-                elif not isinstance(key_share, bytes):
-                    # If key_share is not bytes or a string, raise an error
-                    raise ProcessException(analysis_id, 500, f"ValueError: key_share obtained in wrong format: {type(key_share)}")
-                    # return "Error", f"ValueError: key_share obtained in wrong format: {type(key_share)}"
-                
-                return key_share
+                key_shares = response.json().get('key_share')
+                if isinstance(key_shares, list) and all(isinstance(share, str) for share in key_shares):
+                    # Convert each string in the list to bytes
+                    key_shares = [bytes.fromhex(share) for share in key_shares]
+                elif not all(isinstance(share, bytes) for share in key_shares):
+                        # If key_shares is not all bytes or strings, raise an error
+                        raise ProcessException(analysis_ids, 500, f"ValueError: key_shares obtained in wrong format: {type(key_shares)}, or individual key shares: {type(key_shares[0])}")
+
+                return key_shares
             else:
                 # Return an error message if the request was not successful
-                raise ProcessException(analysis_id, 500, f"ERROR: {response}")
+                raise ProcessException(analysis_ids, 500, f"ERROR: {response}")
                 # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            raise ProcessException(analysis_id, 500, f"ERROR: {e}")
+            raise ProcessException(analysis_ids, 500, f"ERROR: {e}")
             # return "Exception", e
 
-    def store_result(self, analysis_id, user_id, result):
+    def store_result(self, analysis_ids, user_ids, results):
         """
         POST method to store result in the Mozaik Obelisk service.
 
@@ -180,15 +184,16 @@ class MozaikObelisk:
             user_id (list) : The list of ID(s) of the user(s).
             result (list) : List of results to store (each item corresponds to a ciphertext corresponding to result for a specific user_id).
         """
-        endpoint = f'/analysis/result/{analysis_id}'
+        endpoint = f'/analysis/result'
 
         # Construct the full URL
         url = f'{self.base_url}{endpoint}'
 
         # Define the payload (data to be sent in the POST request)
         payload = {
-            'user_id': user_id,
-            'result': result,
+            'analysis_id':analysis_ids,
+            'user_id': user_ids,
+            'result': results,
             'is_combined': True
         }
 
@@ -199,10 +204,10 @@ class MozaikObelisk:
             # Check if the request was successful (status code 200)
             if response.status_code != 204:
                 # Return an error message if the request was not successful
-                raise ProcessException(analysis_id, 500, f"ERROR: {response}")
+                raise ProcessException(analysis_ids, 500, f"ERROR: {response}")
                 # return "Error", response
         except requests.RequestException as e:
             # Return an error message if the request encountered an exception
-            raise ProcessException(analysis_id, 500, f"ERROR: {e}")
+            raise ProcessException(analysis_ids, 500, f"ERROR: {e}")
             # return "Exception", e
 

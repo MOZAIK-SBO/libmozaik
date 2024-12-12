@@ -13,12 +13,12 @@ class MozaikObeliskTests(unittest.TestCase):
     def test_get_data_success(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {'user_data': [1,2]}
+        mock_response.json.return_value = {'user_data': [[1, 2], [3, 4]]}
         mock_post.return_value = mock_response
 
-        data = self.mozaik.get_data('a2aad3bb-8997-4384-84dd-d800b5587997', 'user_id', [1,2])
+        data = self.mozaik.get_data(['a2aad3bb-8997-4384-84dd-d800b5587997'], ['user_id_1', 'user_id_2'], [[0, 10], [10, 20]])
 
-        self.assertEqual(data, [1,2])
+        self.assertEqual(data, [[1, 2], [3, 4]])
 
     @patch('mozaik_obelisk.requests.post')
     def test_get_data_failure(self, mock_post):
@@ -27,30 +27,30 @@ class MozaikObeliskTests(unittest.TestCase):
         mock_post.return_value = mock_response
 
         with self.assertRaises(ProcessException) as context:
-            self.mozaik.get_data('a2aad3bb-8997-4384-84dd-d800b5587997', 'user_id', [1, 2])
+            self.mozaik.get_data(['a2aad3bb-8997-4384-84dd-d800b5587997'], ['user_id_1', 'user_id_2'], [[0, 10], [10, 20]])
 
         self.assertEqual(context.exception.code, 500)
         self.assertIn('ERROR:', context.exception.message)
 
-    @patch('mozaik_obelisk.requests.get')
-    def test_get_key_share_success(self, mock_get):
+    @patch('mozaik_obelisk.requests.post')
+    def test_get_key_share_success(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {'key_share': '1234567890'}
-        mock_get.return_value = mock_response
+        mock_response.json.return_value = {'key_share': ['1234567890abcdef', 'abcdef1234567890']}
+        mock_post.return_value = mock_response
 
-        key_share = self.mozaik.get_key_share('a2aad3bb-8997-4384-84dd-d800b5587997')
+        key_shares = self.mozaik.get_key_share(['a2aad3bb-8997-4384-84dd-d800b5587997'])
 
-        self.assertEqual(key_share, bytes.fromhex('1234567890'))
+        self.assertEqual(key_shares, [bytes.fromhex('1234567890abcdef'), bytes.fromhex('abcdef1234567890')])
 
-    @patch('mozaik_obelisk.requests.get')
-    def test_get_key_share_failure(self, mock_get):
+    @patch('mozaik_obelisk.requests.post')
+    def test_get_key_share_failure(self, mock_post):
         mock_response = MagicMock()
         mock_response.status_code = 500
-        mock_get.return_value = mock_response
+        mock_post.return_value = mock_response
 
         with self.assertRaises(ProcessException) as context:
-            self.mozaik.get_key_share('a2aad3bb-8997-4384-84dd-d800b5587997')
+            self.mozaik.get_key_share(['a2aad3bb-8997-4384-84dd-d800b5587997'])
 
         self.assertEqual(context.exception.code, 500)
         self.assertIn('ERROR:', context.exception.message)
@@ -63,7 +63,7 @@ class MozaikObeliskTests(unittest.TestCase):
 
         # No exception means success
         try:
-            self.mozaik.store_result('a2aad3bb-8997-4384-84dd-d800b5587997', 'user_id', 'result')
+            self.mozaik.store_result(['a2aad3bb-8997-4384-84dd-d800b5587997'], ['user_id_1', 'user_id_2'], ['result1', 'result2'])
         except ProcessException:
             self.fail("store_result() raised ProcessException unexpectedly!")
 
@@ -74,11 +74,10 @@ class MozaikObeliskTests(unittest.TestCase):
         mock_post.return_value = mock_response
 
         with self.assertRaises(ProcessException) as context:
-            self.mozaik.store_result('a2aad3bb-8997-4384-84dd-d800b5587997', 'user_id', 'result')
+            self.mozaik.store_result(['a2aad3bb-8997-4384-84dd-d800b5587997'], ['user_id_1', 'user_id_2'], ['result1', 'result2'])
 
         self.assertEqual(context.exception.code, 500)
         self.assertIn('ERROR:', context.exception.message)
-
 
 if __name__ == '__main__':
     unittest.main()
