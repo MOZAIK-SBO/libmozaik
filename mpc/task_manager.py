@@ -346,14 +346,12 @@ class TaskManager:
                         shares_to_encrypt = self.read_shares(analysis_ids, number_of_shares=5*batch_size)
 
                         # Unflatten the list of shares to match corresponding users and analyses
-                        index = 0
-                        shares_to_encypt_unflattened = []
-                        for user_samples in shares_to_encrypt:
-                            shares_to_encypt_unflattened.append(shares_to_encrypt[index:index + len(user_samples)*5])
-                            index += len(user_samples)*5
-                            
+                        shares_to_encrypt_unflattened = []
+                        for i, user_samples in enumerate(input_data):
+                            shares_to_encrypt_unflattened.append(shares_to_encrypt[i*len(user_samples)*5:i*len(user_samples)*5+len(user_samples)*5])
+
                         # Run distributed encryption on the concataneted final result
-                        encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_ids[i], analysis_ids[i], analysis_type, key_shares[i], shares_to_encypt_unflattened[i]) for i in range(len(user_ids))])
+                        encrypted_shares = dist_enc(self.aes_config, self.keys, [(user_ids[i], analysis_ids[i], analysis_type, key_shares[i], shares_to_encrypt_unflattened[i]) for i in range(len(user_ids))])
 
                         if isinstance(encrypted_shares, list) and all(isinstance(encrypted_share, bytes) for encrypted_share in encrypted_shares):
                             self.mozaik_obelisk.store_result(analysis_ids, user_ids, [encrypted_share.hex() for encrypted_share in encrypted_shares])  
@@ -370,7 +368,7 @@ class TaskManager:
                         self.request_queue.task_done()
 
                         del shares_to_encrypt
-                        del shares_to_encypt_unflattened
+                        del shares_to_encrypt_unflattened
                         del encrypted_shares
                         
                 else:
