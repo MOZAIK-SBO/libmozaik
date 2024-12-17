@@ -101,10 +101,10 @@ model.opt.layers[4].b = biases4
 
 guesses = model.predict(input_data)
 
-sfix.write_to_file(guesses[0])
+# sfix.write_to_file(guesses[0])
 
-# print_ln('Prediction: %s', guesses[0].reveal())
+print_ln('Prediction: %s', guesses[0].reveal())
 
-# @for_range(len(guesses))
-# def _(i):
-#     sfix.write_to_file(guesses[i])
+@for_range(len(guesses))
+def _(i):
+    sfix.write_to_file(guesses[i])
