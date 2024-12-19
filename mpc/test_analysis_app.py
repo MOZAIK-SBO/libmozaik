@@ -47,6 +47,14 @@ class AnalysisAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(b"The analysis ID is unknown" in response.data)
 
+    def test_analyse_route_wrong_streaming(self):
+        headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+        with self.app.app.test_request_context('/analyse/', method='POST', headers=headers):
+            data={'analysis_id': ['01HQJRGMVHY51W7ZV8S2TXRQ7N'], 'user_id': ['01HQJRH8N3ZEXH3HX7QD56FH0W'], 'data_index': [[1, 2]], 'analysis_type': 'Heartbeat-Demo-1', 'streaming': [1,2]}
+            response = self.client.post('/analyse/', json=data, headers=headers)
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue(b"The 'streaming' parameter must be a list of lists if provided" in response.data)
+
 
 if __name__ == '__main__':
     unittest.main()
