@@ -74,7 +74,7 @@ class TestTaskManager(unittest.TestCase):
             task_manager.db.create_entry(aid)
 
         # Mock the request queue to provide predefined data
-        mock_request_data = [(analysis_id, user_id, analysis_type, data_index, False)]  
+        mock_request_data = [(analysis_id, user_id, analysis_type, data_index, False, None)]  
         task_manager.request_queue.get = MagicMock(side_effect=mock_request_data)
 
         # Call the process_requests method
