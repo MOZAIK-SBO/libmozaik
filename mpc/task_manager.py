@@ -271,7 +271,7 @@ class TaskManager:
         """
         while True:
             try:
-                analysis_ids, user_ids, analysis_type, data_indeces, online_only = self.request_queue.get()
+                analysis_ids, user_ids, analysis_type, data_indeces, online_only, streaming = self.request_queue.get()
                 if analysis_type == "Heartbeat-Demo-1":
                     # Lock to ensure thread safety
                     with self.request_lock:
@@ -289,7 +289,10 @@ class TaskManager:
                         key_shares = []
                         for i, encrypted_key_share in enumerate(encrypted_key_shares):
                             try:
-                                key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", data_indeces[i], analysis_type, encrypted_key_share)) 
+                                if streaming is not None:
+                                    key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", streaming[i], analysis_type, encrypted_key_share))
+                                else:
+                                    key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", data_indeces[i], analysis_type, encrypted_key_share))
                             except Exception as e:
                                 raise ProcessException(analysis_ids[i], 500, f'An error occurred while decrypting key_share: {e}')
                                 # self.error_in_task(analysis_id, 500, f'An error occurred while decrypting key_share: {e}')
