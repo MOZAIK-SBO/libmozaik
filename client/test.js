@@ -1,4 +1,4 @@
-import { createAnalysisRequestData, reconstructResult } from "./libmozaik.js";
+import { createAnalysisRequestData, createAnalysisRequestDataForStreaming, reconstructResult } from "./libmozaik.js";
 import { Aes as SJCLAes } from "./aes.js";
 
 var crypto = window.crypto;
@@ -94,6 +94,27 @@ async function testCreateAnalysisRequestData() {
   console.log(bufferToHex(cts[2]));
 }
 
+async function testCreateAnalysisRequestDataForStreaming() {
+  const userId = "4d14750e-2353-4d30-ac2b-e893818076d2";
+  const iotDeviceKey = new Uint8Array([0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01]);
+  // data indices in Obelisk are UTC timestamps with precision of milliseconds
+  const start = Date.parse("2024-01-24T12:00:00");
+  const stop = Date.parse("2024-01-25T12:00:00");
+  
+  const pk1 = await importRsaKey(mpc1Pubkey);
+  const pk2 = await importRsaKey(mpc2Pubkey);
+  const pk3 = await importRsaKey(mpc3Pubkey);
+
+
+
+  const cts = await createAnalysisRequestDataForStreaming(userId, iotDeviceKey, "AES-GCM-128", pk1, pk2, pk3, "Heartbeat-Demo-1", start, stop);
+
+  console.log("testCreateAnalysisRequestDataForStreaming ciphertexts:")
+  console.log(bufferToHex(cts[0]));
+  console.log(bufferToHex(cts[1]));
+  console.log(bufferToHex(cts[2]));
+}
+
 function hexToBuffer(s) {
   const ct = new Uint8Array(s.length/2)
   for (var i=0; i<ct.byteLength; i++) {
@@ -164,6 +185,11 @@ testCreateAnalysisRequestData()
 testReconstructResult()
   .then(() => {
     console.log("Test ReconstructResult ok");
+  });
+  
+testCreateAnalysisRequestDataForStreaming()
+  .then(() => {
+    console.log("Test CreateAnalysisRequestDataForStreaming ok");
   });
 
 testAesKeyschedule();
