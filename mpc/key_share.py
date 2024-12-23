@@ -59,7 +59,9 @@ def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, cip
     return _decrypt_key_share_helper(keys, 0x1, user_id, algorithm, data_indices, analysis_type, ciphertext)
 
 def decrypt_key_share_for_streaming(keys, user_id, algorithm, streaming_begin, streaming_end, analysis_type, ciphertext):
-    # check correct time # UTC timestamp in milliseconds
+    # check correct time, streaming_begin and streaming_end are timestamps in milliseconds
+    
+     # UTC timestamp in seconds
     t = time.time() * 1000
     if streaming_begin <= t < streaming_end:
         return _decrypt_key_share_helper(keys, 0x2, user_id, algorithm, [streaming_begin, streaming_end], analysis_type, ciphertext)

@@ -22,7 +22,7 @@ async function card_wrapper(userId, iotDeviceKey64, algorithm, party1PubkeyJSON,
     const party1PubKey = await jsonToJWK(party1PubkeyJSON)
     const party2PubKey = await jsonToJWK(party2PubkeyJSON);
     const party3PubKey = await jsonToJWK(party3PubkeyJSON);
-    const dataIndices = dataIndicesSTR.map(date => Date.parse(date) / 1000);
+    const dataIndices = dataIndicesSTR.map(date => Date.parse(date)); // the returned timestamp is milliseconds
 
     const [c1,c2,c3] = await createAnalysisRequestData(userId, iotDeviceKey,algorithm, party1PubKey, party2PubKey, party3PubKey, analysisType, dataIndices)
 
@@ -45,7 +45,7 @@ async function cardfs_wrapper(userId, iotDeviceKey64, algorithm, party1PubkeyJSO
     const party1PubKey = await jsonToJWK(party1PubkeyJSON)
     const party2PubKey = await jsonToJWK(party2PubkeyJSON);
     const party3PubKey = await jsonToJWK(party3PubkeyJSON);
-    const startTime = Date.parse(start);
+    const startTime = Date.parse(start); // the returned timestamp is milliseconds
     const stopTime = Date.parse(stop);
 
     const [c1,c2,c3] = await createAnalysisRequestDataForStreaming(userId, iotDeviceKey,algorithm, party1PubKey, party2PubKey, party3PubKey, analysisType, startTime, stopTime);

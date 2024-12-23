@@ -654,12 +654,13 @@ class IntegrationTest(unittest.TestCase):
         and checks whether the shares were set up properly
         """
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        # all times are milliseconds since epoch
         data_idx = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03",
                     "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07",
                     "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
         date_format = "%Y-%m-%dT%H:%M:%S"
         date_parsed = [datetime.strptime(date, date_format) for date in data_idx]
-        date_timestamps = [round(date.timestamp()) for date in date_parsed]
+        date_timestamps = [1000*round(date.timestamp()) for date in date_parsed]
 
         # normal values that are not part of the key don't need urlsafe base64 unlike the key. We love consistency :)))
         iot_key_bytes = bytes(
@@ -697,12 +698,15 @@ class IntegrationTest(unittest.TestCase):
         and checks whether the shares were set up properly
         """
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
-        start = time.time() - 2*60*60*24 # streaming started two days ago
-        stop = start + 5*60*60*24 # streaming ends in 3 days
+
+        # timestamps are milliseconds since epoch
+
+        start = 1000 * (round(time.time()) - 2*60*60*24) # streaming started two days ago
+        stop = start + 5*1000*60*60*24 # streaming ends in 3 days
         
         date_format = "%Y-%m-%dT%H:%M:%S"
-        start_str = time.strftime(date_format, start)
-        stop_str = time.strftime(date_format, stop)
+        start_str = datetime.fromtimestamp(start/1000.).strftime(date_format)
+        stop_str = datetime.fromtimestamp(stop/1000.).strftime(date_format)
 
         # normal values that are not part of the key don't need urlsafe base64 unlike the key. We love consistency :)))
         iot_key_bytes = bytes(
@@ -728,7 +732,7 @@ class IntegrationTest(unittest.TestCase):
         for i in range(3):
             keys = MpcPartyKeys(IntegrationTest.get_config(i))
             ct = ciphertexts[i]
-            key_share = decrypt_key_share_for_streaming(keys, user_id, algorithm, int(start*1000), int(end*1000), analysis_type, ct)
+            key_share = decrypt_key_share_for_streaming(keys, user_id, algorithm, start, stop, analysis_type, ct)
             shares.append(key_share)
 
         result = [a ^ b ^ c for a, b, c in zip(*shares)]
@@ -984,8 +988,8 @@ class IntegrationTest(unittest.TestCase):
                 {p2},
                 {p3},
                 "{analysis_type}",
-                {start},
-                {stop}
+                "{start}",
+                "{stop}"
             );
         """
 
@@ -1019,11 +1023,11 @@ class IntegrationTest(unittest.TestCase):
         self.firefox_driver.implicitly_wait(1)
 
         c1_b64: str = self.block_until_nonempty(
-            "return window.integration.results.createAnalysisRequestData.c1;")
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c1;")
         c2_b64: str = self.block_until_nonempty(
-            "return window.integration.results.createAnalysisRequestData.c2;")
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c2;")
         c3_b64: str = self.block_until_nonempty(
-            "return window.integration.results.createAnalysisRequestData.c3;")
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c3;")
 
         # Restore correct padding
         c1_b64 = c1_b64.strip()
