@@ -7,6 +7,8 @@ import subprocess
 import base64
 import threading
 import traceback
+import datetime
+import time
 
 from pathlib import Path
 from math import log2, ceil
@@ -14,13 +16,15 @@ from datetime import datetime
 from typing import Dict, Tuple
 from threading import Thread
 
+from unittest import mock
+
 # Custom or other packages
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
-from key_share import MpcPartyKeys, decrypt_key_share, prepare_params_for_dist_enc
+from key_share import MpcPartyKeys, decrypt_key_share, decrypt_key_share_for_streaming, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig, dist_enc, dist_dec
 
 class ExceptionHookContextManager:
@@ -87,18 +91,24 @@ class TestDecryptKeyShare(unittest.TestCase):
         }
 
     ciphertexts = [
-        bytes.fromhex('80db8c887cb023517d809e5fad424221ba3ca51328a47a505a58519a03d9c19c03b861bb54e81d88227f6ca073b2c05d2a9e25f8577dcfe58ae935386ed1ae44cfb3d70ebbba482e085503d41bdd511385901df24984c86b2f551bf1bebb32be6bdd6737249502b113e7e48aece04cf6171de534d7e1cf12f1c7f914950d9f3ee1750e1749fc8ecde7595e6e7af99166ed29c0744a839dc504c666860f9f3193c660e2571f9d4b30aa82c65049811bfb529827b10766833a5734849ad54b787a11e810e9a2327f188869b8ab88b90f5472f2dc176a0fd406a005a5a0d66876138b3c4b061985c2c940effde85ac350328b6fbc2b1b157568dc92d0448004663a'),
-        bytes.fromhex('66887021bb4870808989d1e4f11726ee903e6c9d46f4cac292a156fbc04dd2d394001fd70525be2a7c65da3441eed89f4336983ca7369c63cf258e0d22de7f83cdf02a9918160fcd9d72368eedd10c7f856722bb778e43518ab10a9acb19550518322a563b910b31d27de39db30101e0586dd96a6af4566900ffb022e4a4f7f21e853961a81f89ef05f21feaffad08343eadc8a1d89d22d4e4c83922b1d5932e24b2d65da9dc9df201395666a7565543ad0e9b09376f4fc55b9d888135fd6bbd463c201b0c1da64931a3b088318c8383f8db9fe2237fe2741d87a47886809a6add07227ccec9d390c63f50b7b1e932037e699c708b3e50697888064fad0f08c9'),
-        bytes.fromhex('a3c47abe9b292fa962f3b2f85d25cee76a8f176b1e4b42e265cdfdab57915cddeca990964cd2c8f87474c775cd0bc7fd7ea407e56bdcbc9700bc1d33174d1e5bb032a74c71aff8d14af9792f0bd5de871e57a1823ba9b317aee3a708e5c9608d6bb6a5c0c2c0ae134efd23c741b6c0bd1c666b181a1fad8d1caae6ba559cdbabce03968999d29e1dfa7bd7302906654ad0de9523649ef412ef76eb4bf2f380dc74c9fea23c47be264ba63a3e48eb0ae5e6ef29df27d4f0fe93ead18f8a4f0d45c80b5b7e04cca65e60ee22c02fe04825be0842cd27828611b167a86e4730a6ff3cb311b2f4baaf88b218b072ea071f8c48ac3c38e3cab83526f20fb380baf4ff')
+        bytes.fromhex('3261f3c42e7b0648b128281d882b3f7e154097a1677f30f8d650da434a9eb195b705ff3393c7b87c6ac9108f71878494cb8dc55a679ca8212122cca4cf543cda47d2d0c3ae9219465c382262b669285a95e88c1e2748d2bd5197e806c7f62225675790ddb59b6a149224f41a4c198bbb99b2f886f509da6877845c22e7989108db2faa3743836f0e2a348e38ca2f2c2c3b4cab2675f4e71527399f7096b2148465a020e5d3db52f4eae0cdc2e88b1fe0a0740d29e52be73fe6d7a4581d0b7697c16cefa2797ebb66286ed8ea522c0adca103bab6b62dbdd91dd65a99c6bb97e50f98c8d899239c7a732dccbbd353f9e7edb9599bf202c283a10540fe3750ffb7'),
+        bytes.fromhex('597e4a6a55e68ec973491c0078edc098d8b00427552947cd9ace0197a9aecac46232bc41181313a07a6b6dba3283c52a2904913388fa104628ec9cd43817b152fcbe5a63ce5a05f590c58547987281fe181bedeb615175d4842a3aac659a3453c1ce1da97ca8e2eab8c67c309b08af5c7aa7a8694daf26a61b28cc6f5db09b04d28dc0afadda758daf2866a25b603ede8eb1eac8659cfdbe07ffb6a9cc8803a762d99e07c80ab7d3b0bee3331e000d8c1585c6ed0a94f12d224f449c4e40e05c4ddb0ebb0aafa3b33c0066e842146d65a346228252b5c5aef27c3802b8abebcb0336a94683ca221b4e7cb92ed0aa2baa10ee20d3bbb9b7c59d2ff5c65f6c03e9'),
+        bytes.fromhex('9e747dcf88b9c56a28f76d2eee420b0d329d961db9d26071f84cead6b47b5056daa9033e2fff569761c1a17bfc63fa76f3119ce9a5856be5cd89a5afb73fc9e5b60e8aafe5358a0a2b13447002839beee8a141693433a1aaa8f005b725f4e0372f64ba307162158d2a9c458dff4b02d2c2c1fe77859b326013470f9caf61ac4e3b58e5f669c9a16c907d063186ac2929a4f3d1c2f08846b50b3a699e87f486571bd63557bff6071ce5efd8e3c5c17989f2bcaa41b2b2169a228f7aabbde9c69fd8506728e9058225b28839b4b1fdf57cf108237a1fc7ba2f4a099c3060c28195d8f027142606460b647e3d9d882984f6adafea2b59f9269853b1abd38177809e')
     ]
     expected_key = bytes.fromhex('12233445566778899aabbccddeeff001')
 
     ks_ciphertexts = [
-        bytes.fromhex('47b6e2f7b24ab350d9f32e06b4161bf017021121439d8bc13abf379fd6f0c21c1ab28cd269cac4fbed90c84511ae68054ec2e640ff132e04523cb6b266e663ea420e0fae09758dbe28f1111f72cfd3334ac6e322f993eb89a2b3cabaf19c25d34df50faf99fb0bd4e1ef76a5fd16974ef6a701a308ddf5ab3c88ed796231e7f10de7cea295fd5e16804b8e0126b9f709c8b961d069d577d6dbe026430073a43146d2eadf24791b56b1bceb8e65b416b8f4e391ac2d86fe6454df3a6a5fd0cafe95dba51ebcf0b3ed920235142a85e76717127e683da8fe9ca0d96594edf6229add29c0d438802a04ff75a6b0292b81301c3e5db3241f870600577a47f5f974a0'),
-        bytes.fromhex('8924a814c2c601a456485baa6c63ec24efd4dd149dc6428883c108c8d48d58a21ed43658d5e4e2152a8808aec90c4d0dbb5f3c9b948dc97fdc334fa577087c378734985260d70c1cf16c8ad7c25369a5bf1731225a2b16b8710b66523693500b7dca23fa0e592536a527e91f70c19ef4f9b556cde7394ae14bb225389d8a2fdee0d01eceeedbae8f2d787e3965acb507c7acbd386a7bcf38fbc10565d582e7c0d18c6a9ec337bc9815f727770947d877a9781909dce5ed783cb3826f554f593870158ad917da5cc3411df8f4834a01d98159a9906e44c9c26d0fc8eb1bddac33a385da65e42eebb30bc4756c59c7342fa40fb22454728d4ffb0c345e82b2ada4'),
-        bytes.fromhex('930a004a895891669e83a9a312bc0e867deaf0f38cf1be8f1dea1b1ec2ae6aeaae15c7d8714c9f71c8b2ea774a079b66c4f49057d8f19e61c644901e11c3c7430aab28f4c3af9878b697d66c8ada75928ae4abf01659db4b4b14a1e50ba9fcf403c074b3157351126f53f79594cba14b98f5448e33cc7d9674c58c393a6c7bd027ed0831f9e7a43be21c18b40d46f315288e0bebbbf941c855ba265b51346e6d89fd85af7cba094d0f6869ed02c4de601ab2f29514d2b54503c68aad25b13c6ec4991e5732a9560450c7c2485acec2ea3387ac12a6d870b6c7b1395bd6dfd136945d22f4fada6c60e95e411f8d35e906314143d1d6cec4f8c8690e7ceffaaaa2')
+        bytes.fromhex('216d22d310ab78a20c91888bdb85f23845c46a5c9b90f7e109e74a125c7be51ad41cf696f490a0b603c26ebe8602e95c62a05f186ca46e8c0598ac92872648d725739f8fcaa2deb06fd1e58cc3b25fdbcc2c66f0b21b3307d63ce78b799c9b3caad0310ecad9cd29e675e56b52e2eefcd95c9bf5209978663396cbedee39c89d3042c4655134a337b8f985a23e0880626df5b718b1bc9713173ba20b5f455809c219857bd6a97733ae88df24e3758738d7e20c726b702e96c320c5235bd9fd5519bffd9d86932c12716b7f8d9edd79a0a05a983b4184b37b90c1b6e38cea684e8083f4a1c9602dbb6662cf36d5c7489deb49b652b9a92b7d8c6ff9b68e3c694c'),
+        bytes.fromhex('0df72028540b7204a78e17b895bb428c2fd70e6873887b513d1cc572045ed8b4802bdf8b29a8b966ea59431beb272b675147930094611104219c474894c649d5435c8046929d15b7c1a8d730de0e705adcd5377ca0b105474fa553ffb8583c37686db27f58a03745bfdeb0d4ff89c883f281a1e363654ae959e67aba575c00f6e74483c16b0d0420f5c30b013b282becc73eb8a02cae8f932ead17e3b333751cb2ab121d7683905fc54d21aca42b8eea7120a5afc554a80bc8c135b8f16a03cd3e15eb6eaf638523b4fc7f0eebf109187820aa7283df42d5d7e0a57c0d476ac5d90cf0d34717b8bc034886e2347d5bd7f74bd2a74b12af4ed5a2f77dd6f5210c'),
+        bytes.fromhex('796dab97a3bb88f4bf8c7a58fabfff5e8c3f45ea417b57992ea5fa8c48c5724c1a1e7dd6b5fa3abb58658db39268dad55495164e2706a1a4607aac29f6cf1639356830b03a83a6231e51eeb3e01aa1ac47823bde51e1f13330580c316f7cdb1049b9996807265c32906b42b25288e2b3c174abd15f1041f0ebc7276c9c353db8af857df7129445869d44c4d92e7b831d1f5d5af86d88cf41945a2daf5fb7adde114e2e0abf29ddb6c3bbd7239ccb72748e811cb857efe0661debbc4b82380d84c3d2d5cd8a35cf1c753f9e46a3194b1124f9d0594004a91c8a2d754a14230adbe47eadc972646452be53cc8fc0f89c4e347dc2241c3c7f4393c093af3ecc60f5')
     ]
     expected_key_schedule = bytes.fromhex('12233445566778899aabbccddeeff001ccaf48589ac830d100638c1cde8c7c1daabfec453077dc9430145088ee982c95e8cec66dd8b91af9e8ad4a71063566e476fdaf02ae44b5fb46e9ff8a40dc996ee013300b4e5785f008be7a7a4862e3146a02ca5924554fa92ceb35d36489d6c78df40c1aa9a143b3854a7660e1c3a0a7231450e28ab513510fff6531ee3cc596d3b2c0ca5907d39b56f8b6aab8c4733cf93d2ba6a03af83df6c24e974e063dab')
+
+    ks_ciphertexts_streaming = [
+        bytes.fromhex('407498566f27cd34160cf5da5e2271ea4120b29f750f360ab516ede8d891b64527e034d3838443b3bd90c5c9cf433cffc88efd088ecd0f216925f4d3986dfcc5bc5b2df8fc4f57588b2d57ae2b45f2e78e3629b86a212688c49382a39fcb198614911848c5741edd85b76eb0342bec40c49f420323363462abc031aa3dff62f2ce062e8afad14b7364f24816e9a2161d45af2d1129f2b630e3ff76e40679fc61aa78a11adbbfd3b03062bcd3e9a7c7ff64f48cd698bf1d77ea961404b63b4a1a2495aef768ba605238ab00d89a018d84201a9820f5ecf245d1822349e9c1f92b5d8c5cc361f13144a4518c9da5f5d10d0a977058acc035903a9f996a783bf1eb'),
+        bytes.fromhex('4691b643f86aa426fd42e903abdba21be233f4e180de9008a6c08374a786f8c738dd83bf04391e3ce4a2226ca9bb3510851c124a6a784b93f6b538a8ec93da48463cc1702ff8c953de054fa41d3b62c9040840e4e19979221e853e90b7f5a84df83e76b4da1576e147a578077194956f4d348c75f794055e8eaa2008fcf6772d7f149c218cc717f3b8a49b8ee8aaae0466cb768caab6db8476f2d045e506c2fffb44a1110f3eed166382b6032e2af603dccd576eb49029d4403b31d92ec6191c1bb3f1c8fb4dc597d7571c184435c20ee09ec6827cb5c742a9b838c5b88b8fcda78ce91a8eb2a64579ea2821cd098ae6d13af642cc899da2577afcfb36768889'),
+        bytes.fromhex('97dbadeec33e03b3aa652ca33f16113a5a83cc553d5891e15f0c60ade82e12860a8a0b59c8be2e720ac58cb28cc8ef053ae55449691735f311f2f2ed3a8451e1020c19df2c78cc6c1e34caf59f30bb2e6d7d42388b6be4a1ebe59e40f83c2fe2962c999033d17e2bc5adcc3bfb6478d69897d41591f9e7e9cdadd237e483087ae11dceddd43def7496dabe320cf469f19200ad08e051d31e7dab136f766e74af97d7ea593d90f9b8668367999bec66dc9650767943e4cc9ddc55b501ac995d1ec89525d7c81a5e1a5a6dfe5d80f334f404efe3a1910bfdee17fc848aae9cc50a4a2cd4b0f6926e1cf6d3a1c17e60807f6a9cc72eb97da558cf8e9b90a68555f1')
+    ]
 
     def test_correct_decryption(self):
         shares = list()
@@ -137,6 +147,37 @@ class TestDecryptKeyShare(unittest.TestCase):
         for i in range(176):
             computed_keyschedule[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
         self.assertEqual(computed_keyschedule, TestDecryptKeyShare.expected_key_schedule, msg="Computed key schedule does not match expected")
+
+    @mock.patch('time.time', mock.MagicMock(return_value=datetime.fromisoformat('2024-01-24T19:31:15').timestamp()))
+    def test_correct_decryption_ks_streaming(self):
+        shares = list()
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        stream_start = 1706094000000 #int(datetime.fromisoformat('2024-01-24T12:00:00').timestamp() * 1000)
+        stream_stop = 1706180400000# int(datetime.fromisoformat('2024-01-25T12:00:00').timestamp() * 1000)
+        for i in range(3):
+            keys = MpcPartyKeys(TestDecryptKeyShare.get_config(i))
+            ct = TestDecryptKeyShare.ks_ciphertexts_streaming[i]
+            key_share = decrypt_key_share_for_streaming(keys, user_id, "AES-GCM-128", stream_start, stream_stop, analysis_type, ct)
+            assert key_share != None
+            shares.append(key_share)
+        assert all(len(s) == 176 for s in shares)
+        # reconstruct and check
+        computed_keyschedule = bytearray(176)
+        for i in range(176):
+            computed_keyschedule[i] = shares[0][i] ^ shares[1][i] ^ shares[2][i]
+        self.assertEqual(computed_keyschedule, TestDecryptKeyShare.expected_key_schedule, msg="Computed key schedule does not match expected")
+    
+    def test_decryption_fails_for_streaming(self):
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        analysis_type = "Heartbeat-Demo-1"
+        stream_start = int(datetime.fromisoformat('2024-01-24T12:00:00').timestamp() * 1000)
+        stream_stop = int(datetime.fromisoformat('2024-01-25T12:00:00').timestamp() * 1000)
+        keys = MpcPartyKeys(TestDecryptKeyShare.get_config(0))
+        ct = TestDecryptKeyShare.ks_ciphertexts_streaming[0]
+        with self.assertRaises(Exception) as context:
+            key_share = decrypt_key_share_for_streaming(keys, user_id, "AES-GCM-128", stream_start, stream_stop, analysis_type, ct)
+        self.assertTrue('Integrity check of key share decryption failed (invalid time)' in str(context.exception))
 
     def test_params_dist_enc(self):
         keys = MpcPartyKeys(TestDecryptKeyShare.get_config(0))
@@ -613,12 +654,13 @@ class IntegrationTest(unittest.TestCase):
         and checks whether the shares were set up properly
         """
         user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+        # all times are milliseconds since epoch
         data_idx = ["2024-01-24T12:00:00", "2024-01-24T12:00:01", "2024-01-24T12:00:02", "2024-01-24T12:00:03",
                     "2024-01-24T12:00:04", "2024-01-24T12:00:05", "2024-01-24T12:00:06", "2024-01-24T12:00:07",
                     "2024-01-24T12:00:08", "2024-01-24T12:00:09"]
         date_format = "%Y-%m-%dT%H:%M:%S"
         date_parsed = [datetime.strptime(date, date_format) for date in data_idx]
-        date_timestamps = [round(date.timestamp()) for date in date_parsed]
+        date_timestamps = [1000*round(date.timestamp()) for date in date_parsed]
 
         # normal values that are not part of the key don't need urlsafe base64 unlike the key. We love consistency :)))
         iot_key_bytes = bytes(
@@ -645,6 +687,52 @@ class IntegrationTest(unittest.TestCase):
             keys = MpcPartyKeys(IntegrationTest.get_config(i))
             ct = ciphertexts[i]
             key_share = decrypt_key_share(keys, user_id, algorithm, date_timestamps, analysis_type, ct)
+            shares.append(key_share)
+
+        result = [a ^ b ^ c for a, b, c in zip(*shares)]
+        self.assertListEqual(list(result), list(TestDecryptKeyShare.expected_key_schedule))
+
+    def test_createAnalysisRequestDataForStreaming(self):
+        """
+        Checks whether the key shares created by the client can be decrypted by the server side
+        and checks whether the shares were set up properly
+        """
+        user_id = "4d14750e-2353-4d30-ac2b-e893818076d2"
+
+        # timestamps are milliseconds since epoch
+
+        start = 1000 * (round(time.time()) - 2*60*60*24) # streaming started two days ago
+        stop = start + 5*1000*60*60*24 # streaming ends in 3 days
+        
+        date_format = "%Y-%m-%dT%H:%M:%S"
+        start_str = datetime.fromtimestamp(start/1000.).strftime(date_format)
+        stop_str = datetime.fromtimestamp(stop/1000.).strftime(date_format)
+
+        # normal values that are not part of the key don't need urlsafe base64 unlike the key. We love consistency :)))
+        iot_key_bytes = bytes(
+            [0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc, 0xcd, 0xde, 0xef, 0xf0, 0x01])
+        iot_key = base64.b64encode(iot_key_bytes).decode("ascii").rstrip("=")
+
+        algorithm = "AES-GCM-128"
+        key_path = Path("assets/integration_test_keys")
+        analysis_type="Heartbeat-Demo-1"
+
+        p1_key_path = key_path / "party_key_1.pem"
+        p2_key_path = key_path / "party_key_2.pem"
+        p3_key_path = key_path / "party_key_3.pem"
+
+        key1, p1_json = self.pem_to_jwt(p1_key_path)
+        key2, p2_json = self.pem_to_jwt(p2_key_path)
+        key3, p3_json = self.pem_to_jwt(p3_key_path)
+
+        c1, c2, c3 = self.createAnalysisRequestForStreamingHook(user_id, iot_key, algorithm, p1_json, p2_json, p3_json, analysis_type, start_str, stop_str)
+
+        ciphertexts = [c1,c2,c3]
+        shares = []
+        for i in range(3):
+            keys = MpcPartyKeys(IntegrationTest.get_config(i))
+            ct = ciphertexts[i]
+            key_share = decrypt_key_share_for_streaming(keys, user_id, algorithm, start, stop, analysis_type, ct)
             shares.append(key_share)
 
         result = [a ^ b ^ c for a, b, c in zip(*shares)]
@@ -868,6 +956,78 @@ class IntegrationTest(unittest.TestCase):
             "return window.integration.results.createAnalysisRequestData.c2;")
         c3_b64: str = self.block_until_nonempty(
             "return window.integration.results.createAnalysisRequestData.c3;")
+
+        # Restore correct padding
+        c1_b64 = c1_b64.strip()
+        c1_b64 += "=" * ((4 - len(c1_b64)) % 4)
+        c1: bytes = base64.urlsafe_b64decode(c1_b64)
+
+        c2_b64 = c2_b64.strip()
+        c2_b64 += "=" * ((4 - len(c2_b64)) % 4)
+        c2: bytes = base64.urlsafe_b64decode(c2_b64)
+
+        c3_b64 = c3_b64.strip()
+        c3_b64 += "=" * ((4 - len(c3_b64)) % 4)
+        c3: bytes = base64.urlsafe_b64decode(c3_b64)
+
+        return c1, c2, c3
+    
+    def createAnalysisRequestForStreamingHook(self, user_id, iot_key, algorithm, p1_key_json, p2_key_json,
+                                  p3_key_json, analysis_type, start_str, stop_str) -> Tuple[bytes, bytes, bytes]:
+        """
+        Function that calls the method of the same name in JS and recovers the (hopefully correct) outputs
+        :param _: all parameters play the same role as in the JS equivalent
+        :return: three encrypted shared 1 per party
+        """
+        script_template = """
+            window.integration.createAnalysisRequestDataForStreaming(
+                "{uid}",
+                "{iot_key}",
+                "{alg}",
+                {p1},
+                {p2},
+                {p3},
+                "{analysis_type}",
+                "{start}",
+                "{stop}"
+            );
+        """
+
+        script = script_template.format(
+            uid=user_id,
+            iot_key=iot_key,
+            alg=algorithm,
+            p1=json.dumps(p1_key_json),
+            p2=json.dumps(p2_key_json),
+            p3=json.dumps(p3_key_json),
+            analysis_type=analysis_type,
+            start=start_str,
+            stop=stop_str,
+        )
+
+        root_file = Path("assets/integration_test_glue/integration_glue.html")
+        self.assertTrue(root_file.exists())
+
+        abs_path = root_file.absolute()
+        self.firefox_driver.get("file://" + str(abs_path))
+
+        try:
+            self.firefox_driver.execute_script(script)
+        except Exception as e:
+            import sys
+            sys.stderr.write(script)
+            sys.stderr.flush()
+            self.firefox_driver.close()
+            self.fail(msg="Webdriver threw exception :( {}".format(e))
+
+        self.firefox_driver.implicitly_wait(1)
+
+        c1_b64: str = self.block_until_nonempty(
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c1;")
+        c2_b64: str = self.block_until_nonempty(
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c2;")
+        c3_b64: str = self.block_until_nonempty(
+            "return window.integration.results.createAnalysisRequestDataForStreaming.c3;")
 
         # Restore correct padding
         c1_b64 = c1_b64.strip()
