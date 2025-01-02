@@ -50,7 +50,7 @@ class TestTaskManager(unittest.TestCase):
         }
 
     @staticmethod
-    def process_test(task_manager, key_share, config_index):
+    def process_test(task_manager, key_share, config_index, streaming):
         analysis_id = ["01HQJRH8N3ZEXH3HX7QD56FH0W", "01HQJRH8N3ZEXH3HX7QD56FH0W"]
         user_id = ["e7514b7a-9293-4c83-b733-a53e0e449635", "e7514b7a-9293-4c83-b733-a53e0e449635"]
         analysis_type = "Heartbeat-Demo-1"
@@ -74,7 +74,7 @@ class TestTaskManager(unittest.TestCase):
             task_manager.db.create_entry(aid)
 
         # Mock the request queue to provide predefined data
-        mock_request_data = [(analysis_id, user_id, analysis_type, data_index, False, None)]  
+        mock_request_data = [(analysis_id, user_id, analysis_type, data_index, False, streaming)]  
         task_manager.request_queue.get = MagicMock(side_effect=mock_request_data)
 
         # Call the process_requests method
@@ -194,7 +194,7 @@ class TestTaskManager(unittest.TestCase):
         self.assertTrue(len(created_folders) > 0, "No folders starting with '3-' were created.")
         
 
-    def run_process_requests_test_helper(self, encrypted_key_shares):
+    def run_process_requests_test_helper(self, encrypted_key_shares, streaming):
         if os.path.exists('test1.db'):
             os.remove('test1.db')
         if os.path.exists('test2.db'):
@@ -218,9 +218,9 @@ class TestTaskManager(unittest.TestCase):
 
         with exception_check():
             # Create threads to run the test with different configurations in parallel
-            thread1 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager1,encrypted_key_shares[0],0,))
-            thread2 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager2,encrypted_key_shares[1],1,))
-            thread3 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager3,encrypted_key_shares[2],2,))
+            thread1 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager1,encrypted_key_shares[0],0,streaming,))
+            thread2 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager2,encrypted_key_shares[1],1,streaming,))
+            thread3 = threading.Thread(target=TestTaskManager.process_test, args=(task_manager3,encrypted_key_shares[2],2,streaming,))
 
             # Start the threads
             thread1.start()
@@ -240,7 +240,7 @@ class TestTaskManager(unittest.TestCase):
             bytes.fromhex('43d6cc41273391d3077a31fd2eabb62c73951261eae9ad84dc7cd70e71a63b77f90ce3d3c7bf3bb0f92dcb6207d42d758787b97e942590de348ec9c90113b17b350943b1df2945860bcd414884be0c1d69329ea77b20d0f2d995bd9f852d0983b5a67ec1fb5ce9b30dc95b047c6d194a443d36939e3cc80f11a51631ca9537ab689210b9c90159eecb29ac6ce17ba1865b106d6242fa8471d4b01ebe78ff5b557f0c2b4ce96b33860c214f99cb66de2f058147d87392be508a3fbbefa3396371232d7e5b770518bd57af526f60dd862a88fe16df367f8b64b2bdcf3c9aa02068a1f4cb0f1b68cf5e0aaa8cccee3f66639c88161a38106e5b9d24ae7031f81a8e'),
             bytes.fromhex('c2859c9c3d5b0ee61078224dace892e0176caf33b4f7e11962ebcf79accfde11172f6af08c40854fdc4a04b252b4b6cf4bc9f1825efde8e0ddbd28028010b46755a9b0d941900d0997e3399e5c3c7553edf7bb29d050575e4ce6afb3da11c397d3d6f700a078a40d47eb8c5fc2e13245d6e56079cf2a091e0e9a005f3b43e1d64d3b750b42cf7c20e27b005f6b6b549221c89e1500b660f6c1cd4d597f8fce6b26384d14199fb4b187ecdc217385d4d808dda7883b91e7388b3077bb0958a332d1f4bb2d1f238ad52cae42f03c275125245a2fe323e12fb45df5d2fac8bfb688ea743fddafa486af0c2075812bb53251c09f143135343f4be9b273e2d249d184')
         )
-        self.run_process_requests_test_helper(encrypted_key_shares)
+        self.run_process_requests_test_helper(encrypted_key_shares, None) # no streaming
     
     def test_process_requests_with_keyschedule(self):
         # aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
@@ -248,7 +248,18 @@ class TestTaskManager(unittest.TestCase):
         ks_share1 = bytes.fromhex('3752377e20f3541a9f81a1c22190b2a559d36809483ee93969f3273a0fd54ed779b9f5c05d82e7d8094cb21e53b167de3eb510ce0f0f846b7042e5db0d826e71e60ae71b678803cb5a8028362f923c52366cbbb0c177f4f7a786908bace5d141c57adece7eb9e0386c0a30353af53afe98764458028e2e71156842c80b9c1493363abfe663e31421c95d69df4a8100b5aa101754279163caf4f247276c0ddc21fbefe50ced8c117c01808f7759786fbc754a67109baefa900c492f7225d963bc32854514e125760acc3f4e448729f0fa40c20de01be59033d8a8cf845df19bdba2674390c5efb650ea242285fc7b6488d1636bf730c00bac7997b811060d54a5')
         ks_share2 = bytes.fromhex('1939dec4d2b007cc56f313c91899192f22aca6a89aef3423d844cb6d15739a6533013c11bc2760783e93ceb9dd2560115233ae7e1348fcb5b6f67e09f2fe6d9d615aa3c63761f644d0482a60fe5e660fcd435989623de78a2911e19a408786ee3d912f8b73b8a745306e109ab4d1015abb8cce56e2e3191de3d3cc7c96300a4cdfd2ecc49f4a116aebcb9a4845a6d499522763bf8133c3d34579def7bfeee47d333d65e19bac555d1c4a36285bbdaf44918efb7ab0de6606f71f9fc92982dae5243dc337c16aab823e6d999fc9fa4e8b5462c17dd5b7f651a1b15a7264134437a35b2cf914d37f8df14afbc5ebca6c2877a957cbc88d41707ed675be379a3e55')
         ks_share3 = bytes.fromhex('7756064b2d09df282195384966c583d2e30cfdb7141888e9f1029abef017488a4a83f5091b729de0c11e0e83dbbc3e065537da12dec3543fe5362a505b02610fd9faffc9eb8a5701bcd23f7682008a0d1e5ef0f06df97b9a619de3ff04257a2d52bc096747396c1e051796d4490f21d82b128856240bb828e1ca1cff23dba8594afe51ce8c5049a0e47d31498b88aca4e8c0d55ac8bebb5d10fc0aece5dea08c8f43906275950a1704c2226b02dc3cbc6bac514020b9784f201c246f5e1e9e0ef6d582106ad4874aae2d72c98dc2e63903846fb88f340c29d04c6a1a1b2e60b46f442b4cdd22fd9ddacd45154ee457fabb59565bba60fec4a60f1b8305ad3e7d')
-        self.run_process_requests_test_helper([ks_share1, ks_share2, ks_share3])
+        self.run_process_requests_test_helper([ks_share1, ks_share2, ks_share3], None) # no streaming
+    
+    def test_process_requests_with_keyschedule_streaming(self):
+        # start = "2024-01-24T12:00:00"
+        # stop = "2026-01-24T12:00:00"
+        # aes_key = bytes.fromhex('0102030405060708090a0b0c0d0e0f10')
+        # key_schedule = 0102030405060708090a0b0c0d0e0f10ab74c9d3ae72cedba778c5d7aa76cac791000f7f3f72c1a4980a0473327cceb4858b825cbaf943f822f3478b108f893ffe2cf79644d5b46e6626f3e576a97ada3df6a0ae792314c01f05e72569ac9dff8ca8b657f58ba297ea8e45b28322d84d5fc955bbaa42f72c40ccb29ec3ee6ad3f7cb33955d89c4b91d457627deab1cf48e578c88d3de4831ce9b3e16103022e2bcc414426f1a5c73a1816265b1b14087
+        ks_share1 = bytes.fromhex('654d517852a0021532c2e7a6333d678c3c3bd532bf6d9f7caa518dc2dc5e4fd65624fce36d3c346720c6f77584893bc01e8108f6dca76c8eaee18c27bb890e6ac6d16d83407cf54c54cc753fd52f7850cc689fc6f8447be41766d60bc3bf05ebe5e7b211e10062f4432d808856d539b3d495e5d6b153fd1e04919a6b1c8df16bf6c6573927675daf1e92881d3746e8f5f2b55e74bc5a24feed1ba1866346d7072f846e6eeed047b4df1bfc6a634f2f2b1cc21470ecb031c9f97fc996d6a038384d0dba89b95778e6de62223ffb3a9d55568b9b31942dd3fa2eb234bb1c12a87736dcc9fcbda08a694577e9825612c853c243a880fb053e1e63c62f865d76b8bb')
+        ks_share2 = bytes.fromhex('9bcdf4ddf510bfc54ad5a3cd12077c1c708b317b4c019377bd9d1ac235f7562148a930baa7c27a4613cb558c677cead4fc358862e9a9d3cff8c189c3f85961f54e5de18538c3eca37a0e78a02091e52a9db3ef685d40ce2edf9649917f6bced0b0926ca3a01fe25dbc1ce27f8399aee6b6088c727f3bf45c580b7a664053b0ee5917097bc6b31869e9e3a28caaf79e33b0fee9abb7a0eb7f34a8b9c2c9f4045182f342ebfb6ba43e2a48c4964302bd890e67bbd843534d4030a3f1719ec25ad3a71b6cfc26317e3dfea40dede5bcf01cab9dfc4b5b7b0bcfbb88cad52d689a344dcb8a9fa1e09b369b6fa6bb100f49c2c69f41ce23cf00fe57967230f44a6469')
+        ks_share3 = bytes.fromhex('aca898f776a4f5f8d382720926409c6e06c768f9b72759aeaa2d7dab083f99e0926359117d9faa65225dcf58148857f784420c086618b60b1bdc755d45ff1012e13a248b5a42e174b1f937dcf8b3b622d3f695c9e848bb8a1474558259ed4839a8aeec6a8c9d0e28d819cb762be68ae8893c71e6ff6e9518cbc7063d989dd831f10dce2022b0809ba5a62a2fee6f8480086a26cbaf87696b28774d74f8ca372a99d9cbabe17f494512cff64f91eb8d103f4f1a19a82c0c0a9e39266a475742af5fbde9335fee632c513437cf87028054f9f847e5d648539e9def87f1fdcb0c36c8a29ae3f95ab659e773a942c80285fbdc8f00578b8bc3ff5bd5b0fb4789b9dc')
+        self.run_process_requests_test_helper([ks_share1, ks_share2, ks_share3], [1706094000000, 1769252400000]) # streaming
+    
 
 if __name__ == '__main__':
     unittest.main()
