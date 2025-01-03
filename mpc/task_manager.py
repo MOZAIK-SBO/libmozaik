@@ -290,7 +290,7 @@ class TaskManager:
                         for i, encrypted_key_share in enumerate(encrypted_key_shares):
                             try:
                                 if streaming is not None:
-                                    streaming_start, streaming_end = streaming
+                                    streaming_start, streaming_end = streaming[i]
                                     key_shares.append(decrypt_key_share_for_streaming(self.keys, user_ids[i], "AES-GCM-128", streaming_start, streaming_end, analysis_type, encrypted_key_share))
                                 else:
                                     key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", data_indeces[i], analysis_type, encrypted_key_share))
