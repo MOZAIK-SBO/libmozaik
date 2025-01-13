@@ -13,6 +13,7 @@ from rep3aes import Rep3AesConfig
 from task_manager import TaskManager
 from test import TestRep3Aes, exception_check
 from test_task_manager import TestTaskManager
+from timing import AnalysisTimer
 
 if __name__ == "__main__":
     config_index = int(sys.argv[1])
@@ -36,13 +37,16 @@ if __name__ == "__main__":
     ks_share3 = bytes.fromhex('7756064b2d09df282195384966c583d2e30cfdb7141888e9f1029abef017488a4a83f5091b729de0c11e0e83dbbc3e065537da12dec3543fe5362a505b02610fd9faffc9eb8a5701bcd23f7682008a0d1e5ef0f06df97b9a619de3ff04257a2d52bc096747396c1e051796d4490f21d82b128856240bb828e1ca1cff23dba8594afe51ce8c5049a0e47d31498b88aca4e8c0d55ac8bebb5d10fc0aece5dea08c8f43906275950a1704c2226b02dc3cbc6bac514020b9784f201c246f5e1e9e0ef6d582106ad4874aae2d72c98dc2e63903846fb88f340c29d04c6a1a1b2e60b46f442b4cdd22fd9ddacd45154ee457fabb59565bba60fec4a60f1b8305ad3e7d')
     ks_shares = [ks_share1, ks_share2, ks_share3]
 
+    timer = AnalysisTimer(config_index)
+    timer.start(analysis_id='01HQJRH8N3ZEXH3HX7QD56FH0W')
+
     streaming_ks_share1 = bytes.fromhex('654d517852a0021532c2e7a6333d678c3c3bd532bf6d9f7caa518dc2dc5e4fd65624fce36d3c346720c6f77584893bc01e8108f6dca76c8eaee18c27bb890e6ac6d16d83407cf54c54cc753fd52f7850cc689fc6f8447be41766d60bc3bf05ebe5e7b211e10062f4432d808856d539b3d495e5d6b153fd1e04919a6b1c8df16bf6c6573927675daf1e92881d3746e8f5f2b55e74bc5a24feed1ba1866346d7072f846e6eeed047b4df1bfc6a634f2f2b1cc21470ecb031c9f97fc996d6a038384d0dba89b95778e6de62223ffb3a9d55568b9b31942dd3fa2eb234bb1c12a87736dcc9fcbda08a694577e9825612c853c243a880fb053e1e63c62f865d76b8bb')
     streaming_ks_share2 = bytes.fromhex('9bcdf4ddf510bfc54ad5a3cd12077c1c708b317b4c019377bd9d1ac235f7562148a930baa7c27a4613cb558c677cead4fc358862e9a9d3cff8c189c3f85961f54e5de18538c3eca37a0e78a02091e52a9db3ef685d40ce2edf9649917f6bced0b0926ca3a01fe25dbc1ce27f8399aee6b6088c727f3bf45c580b7a664053b0ee5917097bc6b31869e9e3a28caaf79e33b0fee9abb7a0eb7f34a8b9c2c9f4045182f342ebfb6ba43e2a48c4964302bd890e67bbd843534d4030a3f1719ec25ad3a71b6cfc26317e3dfea40dede5bcf01cab9dfc4b5b7b0bcfbb88cad52d689a344dcb8a9fa1e09b369b6fa6bb100f49c2c69f41ce23cf00fe57967230f44a6469')
     streaming_ks_share3 = bytes.fromhex('aca898f776a4f5f8d382720926409c6e06c768f9b72759aeaa2d7dab083f99e0926359117d9faa65225dcf58148857f784420c086618b60b1bdc755d45ff1012e13a248b5a42e174b1f937dcf8b3b622d3f695c9e848bb8a1474558259ed4839a8aeec6a8c9d0e28d819cb762be68ae8893c71e6ff6e9518cbc7063d989dd831f10dce2022b0809ba5a62a2fee6f8480086a26cbaf87696b28774d74f8ca372a99d9cbabe17f494512cff64f91eb8d103f4f1a19a82c0c0a9e39266a475742af5fbde9335fee632c513437cf87028054f9f847e5d648539e9def87f1fdcb0c36c8a29ae3f95ab659e773a942c80285fbdc8f00578b8bc3ff5bd5b0fb4789b9dc')
     streaming_ks_shares = [streaming_ks_share1, streaming_ks_share2, streaming_ks_share3]
 
     with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
-        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
+        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer)
 
     with exception_check():
         TestTaskManager.process_test(task_manager1, encrypted_key_shares[config_index], config_index, None) # Test secret shared key, no streaming
