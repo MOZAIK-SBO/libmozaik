@@ -13,6 +13,7 @@ from rep3aes import Rep3AesConfig
 from task_manager import TaskManager
 from test import TestRep3Aes, exception_check
 from test_task_manager import TestTaskManager
+from timing import AnalysisTimer
 
 if __name__ == "__main__":
     config_index = int(sys.argv[1])
@@ -33,8 +34,11 @@ if __name__ == "__main__":
     ks_share3 = bytes.fromhex('c23cb47e5bfc7d40d0dbfe5a21ede99b371f5cfe260d16234773bb725e9b5525fba3f8ee20ee6e77a72ecf5d095e5e54fc446a4023c61536361e67d39e673b194387b68565dd8e924be82b278876b1952d314e2c4108cd5949721135fa5a3f911b70490adb78a8135884c962ad2dd969b1397ba091fa9e678a64f6e95f5e996c3cb9e15a4a93cb2f24117f9e8d67b98b2fe94f935f2fe8b498e3dd686ca499eeaaccffefb1664b9d996d40bef561069cc56d9acfd0f646476f4c7bab60a4c68e6b05242623734988d0ab9d6f0284d8d8a148e9fcaef88d70ed31705712bb33936d22ef1ffe42df1276bff5716565423180c87e538d0184f6bf2a1ecb875a636f')
     ks_shares = [ks_share1, ks_share2, ks_share3]
 
+    timer = AnalysisTimer(config_index)
+    timer.start(analysis_id='01HQJRH8N3ZEXH3HX7QD56FH0W')
+
     with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
-        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
+        task_manager1 = TaskManager(mock_app, db, Config(f'server{config_index}.toml'), Rep3AesConfig(f'rep3aes/p{config_index+1}.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer)
 
     with exception_check():
         TestTaskManager.process_test(task_manager1, encrypted_key_shares[config_index], config_index)

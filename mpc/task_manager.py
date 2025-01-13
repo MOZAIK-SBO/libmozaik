@@ -27,7 +27,7 @@ class TaskManager:
         request_lock (threading.Lock): Lock for ensuring thread safety.
         sharesfile (str): File path for storing shares for MP-SPDZ.
     """
-    def __init__(self, app, db, config, aes_config):
+    def __init__(self, app, db, config, aes_config, timer):
         """
         Initialize the TaskManager with the provided parameters.
 
@@ -42,6 +42,7 @@ class TaskManager:
         self.config = config
         self.aes_config = aes_config
         self.keys = MpcPartyKeys(self.config.keys_config())
+        self.timer = timer
 
         self.request_queue = queue.Queue()
 
@@ -364,6 +365,7 @@ class TaskManager:
                         # Update status in the database
                         for analysis_id in analysis_ids:
                             self.db.set_status(analysis_id, 'Completed')
+                            self.timer.end(analysis_id)
 
                         # Remove the request from the queue after processing
                         if test:

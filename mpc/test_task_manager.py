@@ -16,6 +16,7 @@ from key_share import MpcPartyKeys, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig
 from task_manager import TaskManager
 from test import TestRep3Aes, exception_check
+from timing import AnalysisTimer
 
 class TestTaskManager(unittest.TestCase):
     def setUp(self):
@@ -23,8 +24,9 @@ class TestTaskManager(unittest.TestCase):
         self.mock_app = MagicMock()
         self.mock_config = MagicMock()
         self.mock_aes_config = MagicMock()
+        timer = AnalysisTimer(0)
         with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
-            self.task_manager = TaskManager(self.mock_app, self.mock_db, Config('server0.toml'), Rep3AesConfig('rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
+            self.task_manager = TaskManager(self.mock_app, self.mock_db, Config('server0.toml'), Rep3AesConfig('rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer)
 
     @staticmethod
     def expected_encrypted_shares(i):
@@ -211,10 +213,17 @@ class TestTaskManager(unittest.TestCase):
         db3 = Database('test3.db')
         mock_app3 = MagicMock()
 
+        timer1 = AnalysisTimer(1)
+        timer1.start(analysis_id='01HQJRH8N3ZEXH3HX7QD56FH0W')
+        timer2 = AnalysisTimer(2)
+        timer2.start(analysis_id='01HQJRH8N3ZEXH3HX7QD56FH0W')
+        timer3 = AnalysisTimer(3)
+        timer3.start(analysis_id='01HQJRH8N3ZEXH3HX7QD56FH0W')
+
         with patch('mozaik_obelisk.MozaikObelisk.request_jwt_token', return_value="mocked_token"):
-            task_manager1 = TaskManager(mock_app1, db1, Config('server0.toml'), Rep3AesConfig(f'rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
-            task_manager2 = TaskManager(mock_app2, db2, Config('server1.toml'), Rep3AesConfig(f'rep3aes/p2.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
-            task_manager3 = TaskManager(mock_app3, db3, Config('server2.toml'), Rep3AesConfig(f'rep3aes/p3.toml', 'rep3aes/target/release/rep3-aes-mozaik'))
+            task_manager1 = TaskManager(mock_app1, db1, Config('server0.toml'), Rep3AesConfig(f'rep3aes/p1.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer1)
+            task_manager2 = TaskManager(mock_app2, db2, Config('server1.toml'), Rep3AesConfig(f'rep3aes/p2.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer2)
+            task_manager3 = TaskManager(mock_app3, db3, Config('server2.toml'), Rep3AesConfig(f'rep3aes/p3.toml', 'rep3aes/target/release/rep3-aes-mozaik'), timer3)
 
         with exception_check():
             # Create threads to run the test with different configurations in parallel

@@ -8,6 +8,7 @@ from config import Config, DEBUG
 from database import Database
 from rep3aes import Rep3AesConfig
 from task_manager import TaskManager
+from timing import AnalysisTimer
 
 class AnalysisApp:
     """
@@ -31,6 +32,7 @@ class AnalysisApp:
         self.app = Flask(__name__)
         print('Application started')
         self.db = Database('ecg_inference_database.db')
+        self.timer = AnalysisTimer(self.config.CONFIG_PARTY_INDEX)  # Initialize the timer
         self.initialize()
  
     def initialize(self):
@@ -38,7 +40,7 @@ class AnalysisApp:
         Initialize the Flask app and set up routes.
         """
         # Initialize the task manager
-        task_manager = TaskManager(self.app, self.db, self.config, self.aes_config)
+        task_manager = TaskManager(self.app, self.db, self.config, self.aes_config, self.timer)
 
         # Set up routes for Flask app (you need to define your routes)
         @self.app.route('/analyse/', methods=['GET', 'POST'])
@@ -78,6 +80,7 @@ class AnalysisApp:
                     for analysis_id in analysis_ids:
                         ulid.from_str(analysis_id)
                         # ulid.from_str(user_id)
+                        self.timer.start(analysis_id)
                 except ValueError as e:
                     return jsonify(error=f"Invalid analysis_id. Please provide a valid ULID. {e}"), 400
                 
