@@ -59,7 +59,7 @@ function computeAes128KeySchedule(key) {
     return ks;
 }
 
-export async function createAnalysisRequestData(userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, dataIndices) {
+async function createAnalysisRequestDataHelper(stateSeparation, userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, dataIndices) {
     // create context
     const textEncoder = new TextEncoder();
     const userIdAndPubkeyBuffer = await createUserIdAndPubkeyContext(textEncoder, userId, party1Pubkey, party2Pubkey, party3Pubkey);
@@ -74,7 +74,9 @@ export async function createAnalysisRequestData(userId, iotDeviceKey, algorithm,
         view.setBigUint64(8*i, BigInt(int64), true);
     }
     const algorithmBuffer = textEncoder.encode(algorithm);
-    const contextBuffer = append([userIdAndPubkeyBuffer["contextBuf"], dataIndicesBuffer, analysisTypeBuffer, algorithmBuffer]);
+    const sepBuffer = new Uint8Array(1);
+    sepBuffer[0] = stateSeparation;
+    const contextBuffer = append([sepBuffer, userIdAndPubkeyBuffer["contextBuf"], dataIndicesBuffer, analysisTypeBuffer, algorithmBuffer]);
 
     if (algorithm == "AES-GCM-128") {
         if (iotDeviceKey.byteLength != 16) {
@@ -96,6 +98,14 @@ export async function createAnalysisRequestData(userId, iotDeviceKey, algorithm,
     }else{
         throw "Unsupported algorithm";
     }
+}
+
+export async function createAnalysisRequestData(userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, dataIndices) {
+    return createAnalysisRequestDataHelper(0x1, userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, dataIndices);
+}
+
+export async function createAnalysisRequestDataForStreaming(userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, streamingBegin, streamingEnd) {
+    return createAnalysisRequestDataHelper(0x2, userId, iotDeviceKey, algorithm, party1Pubkey, party2Pubkey, party3Pubkey, analysisType, [streamingBegin, streamingEnd]);
 }
 
 export async function reconstructResult(userId, iotDeviceKey, party1Pubkey, party2Pubkey, party3Pubkey, computationId, analysisType, encryptedResult) {

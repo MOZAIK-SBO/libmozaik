@@ -7,7 +7,7 @@ import time
 
 from mozaik_obelisk import MozaikObelisk
 from rep3aes import dist_dec, dist_enc
-from key_share import MpcPartyKeys, decrypt_key_share
+from key_share import MpcPartyKeys, decrypt_key_share, decrypt_key_share_for_streaming
 from config import DEBUG, ProcessException
 
 
@@ -291,7 +291,8 @@ class TaskManager:
                         for i, encrypted_key_share in enumerate(encrypted_key_shares):
                             try:
                                 if streaming is not None:
-                                    key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", streaming[i], analysis_type, encrypted_key_share))
+                                    streaming_start, streaming_end = streaming[i]
+                                    key_shares.append(decrypt_key_share_for_streaming(self.keys, user_ids[i], "AES-GCM-128", streaming_start, streaming_end, analysis_type, encrypted_key_share))
                                 else:
                                     key_shares.append(decrypt_key_share(self.keys, user_ids[i], "AES-GCM-128", data_indeces[i], analysis_type, encrypted_key_share))
                             except Exception as e:

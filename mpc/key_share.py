@@ -2,6 +2,8 @@ from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
 
+import time
+
 
 class MpcPartyKeys:
     def __init__(self, config):
@@ -26,9 +28,11 @@ class MpcPartyKeys:
         return b''.join(buffer)
 
 
-def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, ciphertext):
+def _decrypt_key_share_helper(keys, separation, user_id, algorithm, data_indices, analysis_type, ciphertext):
     # create context
-    context = bytes(user_id, encoding='utf-8') + keys.get_party_keys_as_bytes()
+    sep_byte = bytearray(1)
+    sep_byte[0] = separation & 0xff
+    context = sep_byte + bytes(user_id, encoding='utf-8') + keys.get_party_keys_as_bytes()
     # data_indices are 64-bit numbers
     data_indices_buf = bytearray(len(data_indices) * 8)
     for i, d in enumerate(data_indices):
@@ -49,7 +53,20 @@ def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, cip
         return instance.decrypt(ciphertext)
     except ValueError as e:
         # the integrity check of the decryption failed
-        return None
+        raise Exception("Integrity check of key share decryption failed")
+
+def decrypt_key_share(keys, user_id, algorithm, data_indices, analysis_type, ciphertext):
+    return _decrypt_key_share_helper(keys, 0x1, user_id, algorithm, data_indices, analysis_type, ciphertext)
+
+def decrypt_key_share_for_streaming(keys, user_id, algorithm, streaming_begin, streaming_end, analysis_type, ciphertext):
+    # check correct time, streaming_begin and streaming_end are timestamps in milliseconds
+    
+     # UTC timestamp in seconds
+    t = time.time() * 1000
+    if streaming_begin <= t < streaming_end:
+        return _decrypt_key_share_helper(keys, 0x2, user_id, algorithm, [streaming_begin, streaming_end], analysis_type, ciphertext)
+    else:
+        raise Exception("Integrity check of key share decryption failed (invalid time)")
 
 
 def prepare_params_for_dist_enc(keys, user_id, computation_id, analysis_type):
