@@ -54,6 +54,15 @@ print_green "Compiling heartbeat_inference_demo programs"
 ./compile.py -R64 heartbeat_inference_demo_batched_64 || print_red_and_exit "Compilation failed"
 ./compile.py -R64 heartbeat_inference_demo_batched_128 || print_red_and_exit "Compilation failed"
 
+# Setup new TLS keys between the MPC parties
+if [ "$1" -eq 0 ]; then
+  print_green "Generating new TLS certificates"
+  Scripts/setup-ssl.sh 3 || print_red_and_exit "Failed to generate TLS certificates"
+  print_green "Distributing TLS certificates from P0 to P1 and P2"
+  scp Player-Data/P* root@10.10.168.47:~/libmozaik/mpc/MP-SPDZ/Player-Data || print_red_and_exit "Failed to send certificates to P1"
+  scp Player-Data/P* root@10.10.168.48:~/libmozaik/mpc/MP-SPDZ/Player-Data || print_red_and_exit "Failed to send certificates to P2"
+fi
+
 # Move deployment keys to rep3aes/keys directory
 print_green "Moving deployment keys to rep3aes/keys directory"
 mv ../rep3aes-deployment-keys/p* ../rep3aes/keys/ || print_red_and_exit "Failed to move deployment keys"
