@@ -159,7 +159,7 @@ class TaskManager:
             
             result.check_returncode()
         except subprocess.CalledProcessError as e:
-            raise ProcessException(analysis_id, 500, f"Error running program {e}")
+            raise ProcessException(analysis_id, 500, f"Error running program {e}, Output: {result.stdout} and ErrOutput: {result.stderr}")
             # self.error_in_task(analysis_id, 500, f"Error running program {e}")
 
     def run_offline(self, distributed=True, offline_dest=['10.10.168.47:~/libmozaik/mpc/MP-SPDZ/Player-Data/', '10.10.168.48:~/libmozaik/mpc/MP-SPDZ/Player-Data/']):
@@ -278,6 +278,7 @@ class TaskManager:
                     with self.request_lock:
                         # Get the user data corresponding to the user at the requested indices
                         input_data = self.mozaik_obelisk.get_data(analysis_ids, user_ids, data_indeces)
+                        batch_size = sum(len(sub_array) for sub_array in input_data)
 
                         # Get the shares of the key 
                         encrypted_key_shares = self.mozaik_obelisk.get_key_share(analysis_ids)
@@ -317,14 +318,7 @@ class TaskManager:
                                 dist_dec_args.append((user_ids[i], key_shares[i], sample))
 
                         if DEBUG:
-                            print(f'The vector length of dist_dec_args: {len(dist_dec_args)} (for reference should be equal to the batch_size = the total number of received samples)')
-
-                        batch_size = len(dist_dec_args) 
-
-                        try:
-                            assert batch_size == 1 or batch_size == 2 or batch_size == 4 or batch_size == 64 or batch_size == 128
-                        except AssertionError as e:
-                            raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,64 and 128. {e}')
+                            print(f'The vector length of dist_dec_args: {len(dist_dec_args)} (for reference should be equal to the batch_size {batch_size} = the total number of received samples)')
 
                         # run dist_dec on the batch
                         try:

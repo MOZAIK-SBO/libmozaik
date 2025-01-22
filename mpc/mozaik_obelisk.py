@@ -114,6 +114,11 @@ class MozaikObelisk:
                 # Parse and return the user data from the JSON response
                 user_data = response.json().get('user_data')
                 if isinstance(user_data, list):
+                    batch_size = sum(len(sub_array) for sub_array in user_data)
+                    try:
+                        assert batch_size == 1 or batch_size == 2 or batch_size == 4 or batch_size == 64 or batch_size == 128
+                    except AssertionError as e:
+                        raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,64 and 128. Received number of samples: {batch_size}. {e}')
                     return user_data
                 else:
                     raise ProcessException(analysis_ids, 500, f'ERROR: User data is not in the expected format (array)')
