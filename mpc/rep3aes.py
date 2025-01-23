@@ -2,6 +2,7 @@ from key_share import prepare_params_for_dist_enc
 
 import subprocess
 import json
+from config import DEBUG
 
 class Rep3AesConfig:
     def __init__(self, path_to_config, path_to_bin):
@@ -127,7 +128,8 @@ def _dist_dec_call(config, input_args):
     command = [config.bin, '--config', config.config, 'decrypt', '--mode', 'AES-GCM-128']
     
     input_args = json.dumps(input_args)
-    # print(f'Running "{" ".join(command)}" with input {input_args}')
+    if DEBUG:
+        print(f'Running "{" ".join(command)}" with input {input_args}')
     result = subprocess.run(command, text=True, input=input_args, capture_output=True)
     if result.returncode != 0:
         command = " ".join(str(path) for path in command)
@@ -150,6 +152,8 @@ def _dist_dec_call(config, input_args):
                     raise RuntimeError(f'Dist_dec output unexpected: {m1} {m2}')
             outputs.append(message_share)
         elif "tag_error" in res and "error" not in res:
+            if DEBUG:
+                print(f'Tag error when decrypting samples, returning None.')
             outputs.append(None)
         elif "error" in res:
             raise RuntimeError(f'Dist_dec failed: {res["error"]}')
