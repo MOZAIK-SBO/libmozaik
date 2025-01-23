@@ -326,10 +326,12 @@ class TaskManager:
                         except Exception as e:
                             if test:
                                 raise e
-                            raise ProcessException(analysis_ids, 500,f'An error occurred while processing requests: {e}')
+                            raise ProcessException(analysis_ids, 500,f'An error occurred while running distdec: {e}')
                         
                         if any(x is None for x in decrypted_shares):
                             # a decryption failed (due to tag mismatch)
+                            if DEBUG:
+                                print(f'Decrypted shares: {decrypted_shares}')
                             raise ProcessException(analysis_ids, 500,f'Decryption of a sample failed.')
 
                         # flatten the batch

@@ -1,7 +1,7 @@
 import requests
 import base64
 import time
-from config import ProcessException
+from config import DEBUG, ProcessException
 
 class MozaikObelisk:
     """
@@ -118,6 +118,8 @@ class MozaikObelisk:
                     try:
                         assert batch_size == 1 or batch_size == 2 or batch_size == 4 or batch_size == 64 or batch_size == 128
                     except AssertionError as e:
+                        if DEBUG:
+                            print("Received data from obelisk: ",user_data, " for the following analysis ids: ", analysis_ids)
                         raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,64 and 128. Received number of samples: {batch_size}. {e}')
                     return user_data
                 else:
@@ -168,6 +170,8 @@ class MozaikObelisk:
                     key_shares = [bytes.fromhex(share) for share in key_shares]
                 elif not all(isinstance(share, bytes) for share in key_shares):
                         # If key_shares is not all bytes or strings, raise an error
+                        if DEBUG:
+                            print("Received key shares from obelisk: ",key_shares, " for the following analysis ids: ", analysis_ids)
                         raise ProcessException(analysis_ids, 500, f"ValueError: key_shares obtained in wrong format: {type(key_shares)}, or individual key shares: {type(key_shares[0])}")
 
                 return key_shares
@@ -209,6 +213,8 @@ class MozaikObelisk:
             # Check if the request was successful (status code 200)
             if response.status_code != 204:
                 # Return an error message if the request was not successful
+                if DEBUG:
+                    print(f'Failed to send values to Obelisk. Received response code: {response.status_code}. Attempted payload: {payload}')
                 raise ProcessException(analysis_ids, 500, f"ERROR: {response}")
                 # return "Error", response
         except requests.RequestException as e:
