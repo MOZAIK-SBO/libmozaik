@@ -78,4 +78,4 @@ add_executable(iot_protect src/iot_protect.cpp lib/src/neural_net_io.cpp
         lib/src/neural_net_evaluator.cpp)
 target_include_directories(iot_protect PUBLIC lib/include)
 target_include_directories(iot_protect PUBLIC assets/dependencies/nlohmann-json)
-add_executable(test_deser test_deserial.cpp)
+add_executable(test_deser src/test_deserial.cpp)

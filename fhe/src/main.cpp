@@ -77,26 +77,35 @@ int main() {
     NeuralNetEvaluator evaluator;
     auto cc = evaluator.m_cc;
     auto keys = evaluator.m_key;
-    std::vector<double> test_vec(256, 0);
+
+    auto slots = cc->GetRingDimension() / 2;
+
+    std::vector<double> test_vec(512, 0);
     for(int i = 0; i < 186; i++) {
         test_vec[i] = std::round(sample1[i] * 1000) / 1000;
+        test_vec[i + 256] = std::round(sample4[i] * 1000) / 1000;
     }
-
 
     Plaintext pt = cc->MakeCKKSPackedPlaintext(test_vec);
     pt->SetLength(evaluator.m_batch_size);
 
     auto ct = cc->Encrypt(keys.publicKey, pt);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     auto res = evaluator.eval_network(test, ct);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+
+    std::cerr << "Evaluation took " << elapsed << "ms." << std::endl;
 
     Plaintext result;
 
     cc->Decrypt(keys.secretKey, res, &result);
-    result->SetLength(187);
+    result->SetLength(slots);
     std::cout << "Intermediate result is " << result << std::endl;
 
-    Plaintext result;
     cc->Decrypt(keys.secretKey, res, &result);
     result->SetLength(5);
     std::cout << "Intermediate result is " << result << std::endl;
