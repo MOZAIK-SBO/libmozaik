@@ -5,7 +5,7 @@ file(COPY assets DESTINATION ${CMAKE_BINARY_DIR})
 set(CMAKE_CXX_STANDARD 17)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
-find_package(OpenFHE REQUIRED PATHS "${CMAKE_SOURCE_DIR}/assets/dependencies/openfhe")
+find_package(OpenFHE REQUIRED PATHS "${CMAKE_SOURCE_DIR}/assets/dependencies/openfhe" NO_DEFAULT_PATH)
 if (OpenFHE_FOUND)
     message(STATUS "FOUND PACKAGE OpenFHE")
     message(STATUS "OpenFHE Version: ${BASE_OPENFHE_VERSION}")

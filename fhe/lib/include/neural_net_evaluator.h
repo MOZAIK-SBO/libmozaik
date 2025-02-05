@@ -34,11 +34,11 @@ namespace ckks_nn {
             }
 
             CCParams<CryptoContextCKKSRNS> cc_params;
-            cc_params.SetSecretKeyDist(SPARSE_TERNARY);
-            cc_params.SetRingDim(1 << 13);
+            cc_params.SetSecretKeyDist(UNIFORM_TERNARY);
+            cc_params.SetRingDim(1 << 16);
             cc_params.SetSecurityLevel(HEStd_128_classic);
 
-            cc_params.SetNumLargeDigits(3);
+            //cc_params.SetNumLargeDigits(3);
             cc_params.SetBatchSize(m_batch_size);
 
             std::vector<uint32_t> levelBudget = {5, 4};
@@ -50,10 +50,10 @@ namespace ckks_nn {
             cc_params.SetScalingTechnique(FLEXIBLEAUTOEXT);
             cc_params.SetFirstModSize(firstMod);
 
-            uint32_t levelsAvailableAfterBootstrap = 15;
+            uint32_t levelsAvailableAfterBootstrap = 10;
             m_depth = levelsAvailableAfterBootstrap + FHECKKSRNS::GetBootstrapDepth(levelBudget, SPARSE_TERNARY);
             std::cout << m_depth << std::endl;
-            cc_params.SetMultiplicativeDepth(m_depth);
+            cc_params.SetMultiplicativeDepth(levelsAvailableAfterBootstrap);
 
             m_cc = GenCryptoContext(cc_params);
 

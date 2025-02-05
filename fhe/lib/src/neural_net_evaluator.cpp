@@ -226,7 +226,7 @@ namespace ckks_nn {
 
                 auto func = [](double x) -> double { return x > 0 ? x : -x;};
                 std::cout << lb << ub << std::endl;
-                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 32);
+                auto tmp = m_cc->EvalChebyshevFunction(func, vector, lb, ub, 16);
 
                 return m_cc->EvalAdd(vector, tmp);
             }
