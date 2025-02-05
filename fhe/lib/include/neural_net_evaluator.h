@@ -23,21 +23,26 @@ namespace ckks_nn {
         int_type m_batch_size = 256;
         std::string m_config_dir = ".";
 
+        std::unordered_set<int> rotations_performed;
+
         explicit NeuralNetEvaluator() {
 
             m_batch_size = 256;
-            auto ring_dim = 1 << 10;
+            auto ring_dim = 1 << 17;
 
+            std::vector<int> automorphism_indices = {50, 49, 48, 47, 46, 45, 44, 43, 42, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, -50, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 100, 41, -200};
+
+            /*
             std::vector<int32_t> automorphism_indices;
             for(int32_t i = 1; i < m_batch_size; i++) {
                 automorphism_indices.push_back(i);
                 automorphism_indices.push_back(-i);
-            }
+            } */
 
             CCParams<CryptoContextCKKSRNS> cc_params;
             cc_params.SetSecretKeyDist(SPARSE_TERNARY);
             cc_params.SetRingDim(ring_dim);
-            cc_params.SetSecurityLevel(HEStd_NotSet);
+            cc_params.SetSecurityLevel(HEStd_128_classic);
 
             //cc_params.SetNumLargeDigits(3);
             cc_params.SetBatchSize(ring_dim / 2);
@@ -51,7 +56,7 @@ namespace ckks_nn {
             cc_params.SetScalingTechnique(FIXEDAUTO);
             cc_params.SetFirstModSize(firstMod);
 
-            cc_params.SetMultiplicativeDepth(50);
+            cc_params.SetMultiplicativeDepth(36);
 
             m_cc = GenCryptoContext(cc_params);
 

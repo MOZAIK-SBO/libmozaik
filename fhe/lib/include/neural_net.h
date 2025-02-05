@@ -46,6 +46,10 @@ namespace ckks_nn {
 
         std::pair<int_type, int_type> get_weight_dim(int_type idx) const;
 
+        std::vector<double> eval_layer(int_type layer_idx, std::vector<double>& vec_in);
+
+        std::vector<double> eval_net(std::vector<double>& vec_in);
+
         int_type estimate_multiplicative_depth(int_type func_degree);
 
         ~NeuralNet() = default;

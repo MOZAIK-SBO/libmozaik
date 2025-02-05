@@ -2,6 +2,7 @@
 // Created by leonard on 2/15/24.
 //
 #include <cmath>
+#include <cassert>
 #include "neural_net.h"
 
 namespace ckks_nn {
@@ -101,5 +102,42 @@ namespace ckks_nn {
         }
 
         return depth;
+    }
+
+    std::vector<double> NeuralNet::eval_layer(ckks_nn::int_type layer_idx, std::vector<double> &vec_in) {
+
+        auto dims = get_weight_dim(layer_idx);
+        auto cols = dims.first;
+        auto rows = dims.second;
+
+        assert(vec_in.size() == cols);
+
+        // slowest possible implementation
+        auto bias = get_bias_vector(layer_idx);
+
+        for(int_type i = 0; i < rows; i++) {
+            for(int_type j = 0; j < cols; j++) {
+                bias[i] += vec_in[j] * get_weight(layer_idx, j, i);
+            }
+        }
+
+        auto act = get_activation(layer_idx);
+
+        if (act == Activation::RELU) {
+            for(auto& v : bias) {
+                v = v > 0 ? v : 0;
+            }
+        }
+
+        return bias;
+    }
+
+    std::vector<double> NeuralNet::eval_net(std::vector<double> &vec_in) {
+        auto res = eval_layer(0, vec_in);
+        for(int_type i = 1; i < get_n_layers(); i++) {
+            res = eval_layer(i, res);
+        }
+
+        return res;
     }
 }

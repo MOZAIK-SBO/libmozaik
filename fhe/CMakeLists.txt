@@ -42,7 +42,9 @@ add_executable(fhe src/main.cpp
         lib/src/neural_net_func.cpp
         lib/include/neural_net_evaluator.h
         lib/include/typedefs.h
-        lib/src/neural_net_evaluator.cpp)
+        lib/src/neural_net_evaluator.cpp
+        lib/src/utils.cpp
+        lib/include/utils.h)
 
 target_include_directories(fhe PUBLIC lib/include)
 target_include_directories(fhe PUBLIC assets/dependencies/nlohmann-json)
@@ -65,7 +67,8 @@ add_executable(client_keygen src/setup_client.cpp
         lib/src/neural_net_func.cpp
         lib/include/neural_net_evaluator.h
         lib/include/typedefs.h
-        lib/src/neural_net_evaluator.cpp)
+        lib/src/neural_net_evaluator.cpp
+        )
 target_include_directories(client_keygen PUBLIC lib/include)
 target_include_directories(client_keygen PUBLIC assets/dependencies/nlohmann-json)
 

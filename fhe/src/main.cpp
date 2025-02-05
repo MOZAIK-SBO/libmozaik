@@ -1,6 +1,8 @@
 #include <iostream>
+#include <cassert>
 #include "neural_net.h"
 #include "neural_net_evaluator.h"
+#include "utils.h"
 
 
 using namespace ckks_nn;
@@ -54,24 +56,208 @@ const double sample4[] = {
         0.        , 0.
 };
 
-double CalculateApproximationError(const std::vector<std::complex<double>>& result,
-                                   const std::vector<std::complex<double>>& expectedResult) {
-    if (result.size() != expectedResult.size())
-        OPENFHE_THROW(config_error, "Cannot compare vectors with different numbers of elements");
-
-    // using the infinity norm
-    double maxError = 0;
-    for (size_t i = 0; i < result.size(); ++i) {
-        double error = std::abs(result[i].real() - expectedResult[i].real());
-        if (maxError < error)
-            maxError = error;
+template<typename T>
+void print_vec_for_python(std::vector<T>& vec) {
+    std::cerr << "[ ";
+    for(int i = 0; i < vec.size() - 1; i++) {
+        std::cerr << vec.at(i) << ", ";
     }
-
-    return std::abs(std::log2(maxError));
+    std::cerr << vec.at(vec.size() - 1);
+    std::cerr << " ]" << std::endl;
 }
 
-int main() {
+void softmax_inplace(std::vector<double>& in_out) {
+    double sm = 0;
 
+    for(auto& v : in_out) {
+        v = std::exp(v);
+        sm += v;
+    }
+
+    for(auto& v : in_out) {
+        v /= sm;
+    }
+}
+
+double compute_norm(std::vector<double>& target, int norm = 2) {
+
+    double result = 0;
+    if (norm == 0) {
+        for(auto& v : target)
+            result = std::max(result, std::abs(v));
+        return result;
+    }
+
+    if (norm == 1) {
+        for(auto& v : target)
+            result += std::abs(v);
+        return result;
+    }
+
+    for(auto& v : target)
+        result += v * v;
+
+    return result;
+}
+
+double relative_error(std::vector<double>& target, std::vector<double>& result, int norm = 2) {
+    assert(target.size() == result.size());
+
+    auto dim = target.size();
+    double res = 0;
+
+    std::vector<double> delta(dim, 0);
+    for(int i = 0; i < dim; i++) {
+        delta[i] = std::abs(target[i] - result[i]);
+    }
+
+    auto hi = compute_norm(delta, norm);
+    auto lo = compute_norm(target);
+
+    return hi / lo;
+}
+
+double absolute_error(std::vector<double>& target, std::vector<double>& result, int norm = 2) {
+
+    assert(target.size() == result.size());
+
+    auto dim = target.size();
+    double res = 0;
+
+    std::vector<double> delta(dim, 0);
+    for(int i = 0; i < dim; i++) {
+        delta[i] = std::abs(target[i] - result[i]);
+    }
+
+    return compute_norm(delta, norm);
+}
+
+
+void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string& datapath) {
+
+    const int rounds = 10;
+
+    auto input = std::ifstream(datapath + "/mitbih_test.csv");
+    auto data = readCSV(input);
+
+    auto n_slots = evaluator.m_cc->GetRingDimension() / 2;
+    auto batch_size = evaluator.m_batch_size;
+    auto vecs_per_ct = n_slots / batch_size;
+
+    std::random_device rd; // obtain a random number from hardware
+    std::mt19937 gen(rd()); // seed the generator
+    std::uniform_int_distribution<> distr(0, (int)data.size());
+
+    std::vector<double> L2_err;
+    std::vector<double> L2_err_soft;
+
+    std::vector<double> L1_err;
+    std::vector<double> L1_err_soft;
+
+    std::vector<double> L0_err;
+    std::vector<double> L0_err_soft;
+
+    std::vector<int> clear_labels;
+    std::vector<int> enc_labels;
+    std::vector<int> true_labels;
+
+    long double time = 0;
+
+    for(int i = 0; i < rounds; i++) {
+        std::cerr << "Round " << i << std::endl;
+
+        std::vector<double> packed_vector(n_slots, 0);
+        std::vector<std::vector<double>> expected_results;
+
+        std::vector<int> expected_classes;
+
+        for(int j = 0; j < vecs_per_ct; j++) {
+            auto idx = distr(gen);
+            auto ctj = data.at(idx);
+            expected_classes.push_back(ctj.first);
+            auto& vec = ctj.second;
+
+            expected_results.push_back(nn.eval_net(vec));
+
+            std::copy(vec.begin(), vec.end(), packed_vector.begin() + j * batch_size);
+        }
+
+        auto ptx = evaluator.m_cc->MakeCKKSPackedPlaintext(packed_vector);
+        auto ct = evaluator.m_cc->Encrypt(evaluator.m_key.publicKey, ptx);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        auto res = evaluator.eval_network(nn, ct);
+        auto stop = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+        time += elapsed;
+
+        Plaintext res_plain;
+        evaluator.m_cc->Decrypt(evaluator.m_key.secretKey, res, &res_plain);
+
+        auto res_vec = res_plain->GetRealPackedValue();
+
+        std::vector<std::vector<double>> specific_results;
+        for(int j = 0; j < vecs_per_ct; j++) {
+            std::vector<double> tmp(5, 0);
+            std::copy(res_vec.begin() + j * batch_size, res_vec.begin() + j * batch_size + 5, tmp.begin());
+            specific_results.push_back(tmp);
+        }
+
+        assert(specific_results.size() == expected_results.size());
+
+        for(int j = 0; j < specific_results.size(); j++) {
+
+            auto& target = expected_results.at(j);
+            auto& got = specific_results.at(j);
+
+            auto L2 = relative_error(target, got, 2);
+            auto L1 = relative_error(target, got, 1);
+            auto L0 = relative_error(target, got, 0);
+
+            L2_err.push_back(L2);
+            L1_err.push_back(L1);
+            L0_err.push_back(L0);
+
+            softmax_inplace(target);
+            softmax_inplace(got);
+
+            int clear_label = std::distance(target.begin(), std::max_element(target.begin(), target.end()));
+            int enc_label = std::distance(got.begin(), std::max_element(got.begin(), got.end()));
+            auto true_label = expected_classes.at(j);
+
+            clear_labels.push_back(clear_label);
+            enc_labels.push_back(enc_label);
+            true_labels.push_back(true_label);
+
+            L2 = relative_error(target, got, 2);
+            L1 = relative_error(target, got, 1);
+            L0 = relative_error(target, got, 0);
+
+            L2_err_soft.push_back(L2);
+            L1_err_soft.push_back(L1);
+            L0_err_soft.push_back(L0);
+
+        }
+
+    }
+
+    print_vec_for_python(L0_err);
+    print_vec_for_python(L1_err);
+    print_vec_for_python(L2_err);
+
+    print_vec_for_python(L0_err_soft);
+    print_vec_for_python(L1_err_soft);
+    print_vec_for_python(L2_err_soft);
+
+    print_vec_for_python(clear_labels);
+    print_vec_for_python(enc_labels);
+    print_vec_for_python(true_labels);
+
+    std::cerr << "Total time was " << time / 1000.0 << "s or " << time / clear_labels.size() << "ms. per vector" << std::endl;
+
+}
+
+void single_main() {
     NeuralNet test;
 
     NeuralNetEvaluator evaluator;
@@ -80,7 +266,7 @@ int main() {
 
     auto slots = cc->GetRingDimension() / 2;
 
-    std::vector<double> test_vec(512, 0);
+    std::vector<double> test_vec(slots, 0);
     for(int i = 0; i < 186; i++) {
         test_vec[i] = std::round(sample1[i] * 1000) / 1000;
         test_vec[i + 256] = std::round(sample4[i] * 1000) / 1000;
@@ -111,5 +297,20 @@ int main() {
     std::cout << "Intermediate result is " << result << std::endl;
 
     std::cout << "Hello, World!" << std::endl;
-    return 0;
+
+}
+
+
+int main() {
+
+    NeuralNet test;
+
+    NeuralNetEvaluator evaluator;
+    auto cc = evaluator.m_cc;
+    auto keys = evaluator.m_key;
+
+    std::string datapath = "/home/leonard/PhD/libmozaik/fhe/assets/nn_data";
+
+    gather_statistics(evaluator, test, datapath);
+
 }

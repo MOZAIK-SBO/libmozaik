@@ -51,14 +51,22 @@ namespace ckks_nn {
 
     // End cursed
     CKKSCiphertext NeuralNetEvaluator::eval_network(const ckks_nn::NeuralNet &nn, CKKSCiphertext &input) {
-        std::cout << "Layer... 0" << std::endl;
+        //std::cout << "Layer... 0" << std::endl;
         auto layer_i_out = EvalLayerMany(nn, 0, input);
 
 
         for(int_type i=1; i < nn.get_n_layers(); i++) {
-            std::cout << "Layer..." << i << std::endl;
+            //std::cout << "Layer..." << i << std::endl;
             layer_i_out = EvalLayerMany(nn, i, layer_i_out);
         }
+
+        /*
+        std::cerr << "Rots usec " << std::endl;
+        for (auto& c : rotations_performed) {
+            std::cerr << c << ", ";
+        } */
+
+        rotations_performed.clear();
 
         return layer_i_out->Clone();
     }
@@ -204,7 +212,7 @@ namespace ckks_nn {
             std::fill(cleanup_mask.begin(), cleanup_mask.begin() + padded_length, 1);
             auto cleanup = m_cc->MakeCKKSPackedPlaintext(cleanup_mask);
             acc = m_cc->EvalMult(acc, cleanup);
-            std::cerr << "MUL" << std::endl;
+            //std::cerr << "MUL" << std::endl;
             int32_t pow2rat = 1;
             do {
                 pow2rat *= 2;
@@ -232,7 +240,7 @@ namespace ckks_nn {
 
                 auto func = [](double x) -> double { return x > 0 ? x : 0;};
 
-                return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 64);
+                return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 16);
             }
             case NeuralNet::Activation::SOFTMAX_LINEAR: {
 
@@ -332,6 +340,7 @@ namespace ckks_nn {
         auto vector_periodic_digits = m_cc->EvalFastRotationPrecompute(vector_periodic);
 
         for(int_type vec_idx = 1; vec_idx < matrix_vectors.size(); vec_idx++) {
+            rotations_performed.insert(vec_idx);
             auto rotated_vector = m_cc->EvalFastRotation(vector_periodic, vec_idx, M, vector_periodic_digits);
             auto prod = m_cc->EvalMult(rotated_vector, matrix_vectors.at(vec_idx));
             m_cc->EvalAddInPlace(accumulator, prod);
@@ -388,7 +397,7 @@ namespace ckks_nn {
 
             int32_t rotation_amount = block_size / 2;
             auto rotated_vec = m_cc->EvalRotate(clean_vector, rotation_amount);
-
+            rotations_performed.insert(rotation_amount);
             m_cc->EvalAddInPlace(clean_vector, rotated_vec);
 
             block_size /= 2;
@@ -431,8 +440,9 @@ namespace ckks_nn {
         auto col2row_ratio = n_cols % n_rows == 0 ? n_cols / n_rows : n_cols / n_rows + 1;
         int32_t col2row_ceil = col2row_ratio * n_rows;
 
-        std::cerr << col2row_ratio << " " << col2row_ceil << std::endl;
+        //std::cerr << col2row_ratio << " " << col2row_ceil << std::endl;
 
+        rotations_performed.insert(-col2row_ceil);
         auto period_rotated = m_cc->EvalRotate(period_vector, -col2row_ceil);
 
         return m_cc->EvalAdd(clean_vector, period_rotated);
@@ -533,7 +543,7 @@ namespace ckks_nn {
 
         std::string cc_path = config[CC_STRING];
 
-        std::cout << cc_path << std::endl;
+        //std::cout << cc_path << std::endl;
         if (!Serial::DeserializeFromFile(cc_path, m_cc, ser_type)) {
             std::cerr << "I cannot read serialized data from: " << config_dir_path << cc_path << std::endl;
             std::exit(1);
