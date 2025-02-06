@@ -51,8 +51,16 @@ print_green "Compiling heartbeat_inference_demo programs"
 ./compile.py -R64 heartbeat_inference_demo_batched_1 || print_red_and_exit "Compilation failed"
 ./compile.py -R64 heartbeat_inference_demo_batched_2 || print_red_and_exit "Compilation failed"
 ./compile.py -R64 heartbeat_inference_demo_batched_4 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_16 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_32 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_48 || print_red_and_exit "Compilation failed"
 ./compile.py -R64 heartbeat_inference_demo_batched_64 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_80 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_96 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_112 || print_red_and_exit "Compilation failed"
 ./compile.py -R64 heartbeat_inference_demo_batched_128 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_256 || print_red_and_exit "Compilation failed"
+./compile.py -R64 heartbeat_inference_demo_batched_512 || print_red_and_exit "Compilation failed"
 
 # Setup new TLS keys between the MPC parties
 if [ "$1" -eq 0 ]; then

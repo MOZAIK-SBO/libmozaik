@@ -120,7 +120,7 @@ class MozaikObelisk:
                     except AssertionError as e:
                         if DEBUG:
                             print("Received data from obelisk: ",user_data, " for the following analysis ids: ", analysis_ids)
-                        raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,64 and 128. Received number of samples: {batch_size}. {e}')
+                        raise ProcessException(analysis_ids, 500, f'The current supported batch_size are: 1,2,4,16,32,48,64,80,96,112,128,256 and 512. Received number of samples: {batch_size}. {e}')
                     return user_data
                 else:
                     raise ProcessException(analysis_ids, 500, f'ERROR: User data is not in the expected format (array)')
