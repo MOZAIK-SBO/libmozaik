@@ -112,9 +112,9 @@ double relative_error(std::vector<double>& target, std::vector<double>& result, 
     }
 
     auto hi = compute_norm(delta, norm);
-    auto lo = compute_norm(target);
+    auto lo = compute_norm(target, norm);
 
-    return hi / lo;
+    return hi / (lo + 1e-6);
 }
 
 double absolute_error(std::vector<double>& target, std::vector<double>& result, int norm = 2) {
@@ -135,7 +135,7 @@ double absolute_error(std::vector<double>& target, std::vector<double>& result, 
 
 void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string& datapath) {
 
-    const int rounds = 10;
+    const int rounds = 1;
 
     auto input = std::ifstream(datapath + "/mitbih_test.csv");
     auto data = readCSV(input);
@@ -257,6 +257,46 @@ void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string
 
 }
 
+void main_oneshot() {
+
+    NeuralNet test;
+
+    NeuralNetEvaluator evaluator;
+    auto cc = evaluator.m_cc;
+    auto keys = evaluator.m_key;
+
+    std::string datapath = "/home/leonard/PhD/libmozaik/fhe/assets/nn_data";
+    auto input = std::ifstream(datapath + "/mitbih_test.csv");
+    auto data = readCSV(input);
+
+    auto n_slots = evaluator.m_cc->GetRingDimension() / 2;
+    std::vector<double> packed_vector(n_slots, 0);
+
+    std::random_device rd; // obtain a random number from hardware
+    std::mt19937 gen(rd()); // seed the generator
+    std::uniform_int_distribution<> distr(0, (int)data.size());
+
+    auto sample = data.at(distr(gen));
+
+    std::vector<double> vec(n_slots, 0);
+    std::copy(sample.second.begin(), sample.second.end(), vec.begin());
+    auto pt = evaluator.m_cc->MakeCKKSPackedPlaintext(vec);
+    auto ct = evaluator.m_cc->Encrypt(keys.publicKey, pt);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto res = evaluator.EvalNetworkOneShot(test, ct);
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+
+    Plaintext res_plain;
+    evaluator.m_cc->Decrypt(evaluator.m_key.secretKey, res, &res_plain);
+    res_plain->SetLength(5);
+
+    std::cerr << res_plain << std::endl;
+    std::cerr << elapsed << std::endl;
+
+}
+
 void single_main() {
     NeuralNet test;
 
@@ -303,6 +343,9 @@ void single_main() {
 
 int main() {
 
+    main_oneshot();
+
+    /*
     NeuralNet test;
 
     NeuralNetEvaluator evaluator;
@@ -312,5 +355,5 @@ int main() {
     std::string datapath = "/home/leonard/PhD/libmozaik/fhe/assets/nn_data";
 
     gather_statistics(evaluator, test, datapath);
-
+    */
 }
