@@ -47,20 +47,22 @@ make Fake-Offline.x || print_red_and_exit "Failed to build Fake-Offline.x"
 
 # Compile using compile.py
 print_green "Compiling heartbeat_inference_demo programs"
+# Compile the non-batched version.
 ./compile.py -R64 heartbeat_inference_demo || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_1 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_2 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_4 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_16 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_32 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_48 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_64 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_80 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_96 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_112 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_128 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_256 || print_red_and_exit "Compilation failed"
-./compile.py -R64 heartbeat_inference_demo_batched_512 || print_red_and_exit "Compilation failed"
+
+# Compile the batched demos for all powers of 2 up to 1024.
+for (( b=1; b<=1024; b*=2 )); do
+    ./compile.py -R64 heartbeat_inference_demo_batched_${b} || print_red_and_exit "Compilation failed"
+done
+
+# Compile the batched demos for multiples of 16 up to 256 that are not powers of 2.
+for b in $(seq 16 16 256); do
+    # Test if b is a power of 2.
+    if (( (b & (b-1)) == 0 )); then
+        continue
+    fi
+    ./compile.py -R64 heartbeat_inference_demo_batched_${b} || print_red_and_exit "Compilation failed"
+done
 
 # Setup new TLS keys between the MPC parties
 if [ "$1" -eq 0 ]; then
