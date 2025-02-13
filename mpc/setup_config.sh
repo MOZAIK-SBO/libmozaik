@@ -64,7 +64,6 @@ for b in $(seq 16 16 256); do
     ./compile.py -R64 heartbeat_inference_demo_batched_${b} || print_red_and_exit "Compilation failed"
 done
 
-
 # Setup new TLS keys between the MPC parties
 if [ "$1" -eq 0 ]; then
   print_green "Generating new TLS certificates"
