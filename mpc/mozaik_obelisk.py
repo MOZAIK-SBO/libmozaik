@@ -116,7 +116,7 @@ class MozaikObelisk:
                 if isinstance(user_data, list):
                     batch_size = sum(len(sub_array) for sub_array in user_data)
                     try:
-                        assert batch_size == 1 or batch_size == 2 or batch_size == 4 or batch_size == 64 or batch_size == 128
+                        assert ((batch_size <= 256 and batch_size % 16 == 0) or (batch_size <= 1024 and batch_size > 0 and (batch_size & (batch_size - 1)) == 0))
                     except AssertionError as e:
                         if DEBUG:
                             print("Received data from obelisk: ",user_data, " for the following analysis ids: ", analysis_ids)
