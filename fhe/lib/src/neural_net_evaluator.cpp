@@ -69,7 +69,6 @@ namespace ckks_nn {
         auto layer_i_out = EvalLayerMany(nn, 0, input);
 
 
-
         for(int_type i=1; i < nn.get_n_layers(); i++) {
 
             if (layer_i_out->GetLevel() + 8 > 26) {
@@ -261,7 +260,7 @@ namespace ckks_nn {
             case NeuralNet::Activation::RELU: {
 
                 auto func = [](double x) -> double { return x > 0 ? x : 0;};
-                return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 16);
+                return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 5);
             }
             case NeuralNet::Activation::SOFTMAX_LINEAR: {
 
@@ -361,7 +360,7 @@ namespace ckks_nn {
 
         auto M = m_cc->GetCyclotomicOrder();
         auto vector_periodic_digits = m_cc->EvalFastRotationPrecompute(vector_periodic);
-
+        
         for(int_type vec_idx = 1; vec_idx < matrix_vectors.size(); vec_idx++) {
             rotations_performed.insert(vec_idx);
             auto rotated_vector = m_cc->EvalFastRotation(vector_periodic, vec_idx, M, vector_periodic_digits);
@@ -556,7 +555,7 @@ namespace ckks_nn {
 
     }
 
-    NeuralNetEvaluator::NeuralNetEvaluator(const std::string& config_dir_path, const std::string& config_name) {
+    NeuralNetEvaluator::NeuralNetEvaluator(const std::string& config_dir_path, const std::string& config_name, bool run_boot_setup) {
         m_config_dir = config_dir_path;
         auto config_dir = fs::path(config_dir_path);
         auto config_path = config_dir / config_name;
@@ -602,6 +601,10 @@ namespace ckks_nn {
             std::exit(1);
         }
 
+        if (run_boot_setup) {
+            m_cc->EvalBootstrapSetup({4,4});
+        }
+
         std::cout << m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, ser_type) << std::endl;
         std::cout << m_cc->DeserializeEvalMultKey(mult_key_istream, ser_type) << std::endl;
         std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
@@ -642,31 +645,39 @@ namespace ckks_nn {
     CKKSCiphertext NeuralNetEvaluator::EvalMVDense(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                    ckks_nn::CKKSCiphertext &vector) {
         // Pre-condition: correct values are in the first n coefficients of the ciphertext, anything beyond that is trash
-        auto poly_dim = m_cc->GetRingDimension() / 2;
+        auto vec_size = vector->GetSlots();
         auto dim = nn.get_weight_dim(layer_idx);
         auto n_cols = dim.first;
         auto n_rows = dim.second;
 
-        std::vector<double> clean_mask(poly_dim, 0);
+        std::vector<double> clean_mask(vec_size, 0);
         std::fill(clean_mask.begin(), clean_mask.begin() + n_cols, 1);
 
-        auto mask = m_cc->MakeCKKSPackedPlaintext(clean_mask);
+        auto mask = m_cc->MakeCKKSPackedPlaintext(clean_mask, 1, 0, nullptr, vec_size);
         vector = m_cc->EvalMult(vector, mask);
 
         // repeat the vector now
-        auto fixed_shift = m_batch_size;
-        auto shift_pow = 1;
+        int32_t fixed_shift = m_batch_size;
+
+        int32_t shift_pow = 1;
         while (shift_pow < n_rows) {
 
             rotations_performed.insert(-fixed_shift * shift_pow);
             auto vector_rot = m_cc->EvalRotate(vector, -fixed_shift * shift_pow);
             m_cc->EvalAddInPlace(vector, vector_rot);
 
-            shift_pow <<= 1;
+            shift_pow *= 2;
         }
+        /*
+        auto accumulator = vector->Clone();
+        for (int i = 1; i < n_rows; i++) {
+            auto tmp_rot = m_cc->EvalFastRotation(vector,-fixed_shift * i, m_cc->GetCyclotomicOrder(), vector_dig);
+            m_cc->EvalAddInPlace(accumulator, tmp_rot);
+        }
+        vector = accumulator; */
 
         // vector is now repeated *at least* n_rows times
-        std::vector<double> matrix_vec(poly_dim, 0);
+        std::vector<double> matrix_vec(vec_size, 0);
 
         for(int_type row_i = 0; row_i < n_rows; row_i++) {
             for(int_type col_i = 0; col_i < n_cols; col_i++) {
@@ -674,18 +685,18 @@ namespace ckks_nn {
             }
         }
 
-        auto matrix_vec_ptx = m_cc->MakeCKKSPackedPlaintext(matrix_vec);
+        auto matrix_vec_ptx = m_cc->MakeCKKSPackedPlaintext(matrix_vec,1,0,nullptr,vec_size);
         auto prod_unreduced = m_cc->EvalMult(vector, matrix_vec_ptx);
 
         // next we need to reduce it block_wise
-        auto reduction_shift = m_batch_size / 2;
+        int32_t reduction_shift = int32_t(m_batch_size) / 2;
         while (reduction_shift >= 1) {
 
             rotations_performed.insert(reduction_shift);
             auto vector_red_rot = m_cc->EvalRotate(prod_unreduced, reduction_shift);
             m_cc->EvalAddInPlace(prod_unreduced, vector_red_rot);
 
-            reduction_shift >>= 1;
+            reduction_shift /= 2;
         }
 
         return prod_unreduced;
@@ -694,21 +705,21 @@ namespace ckks_nn {
     CKKSCiphertext NeuralNetEvaluator::EvalMVStride(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                     ckks_nn::CKKSCiphertext &vector) {
         // Pre-condition: values of the vector occur in strides of m_batch_size
-        auto poly_dim = m_cc->GetRingDimension() / 2;
+        auto vec_size = vector->GetSlots();
         auto dim = nn.get_weight_dim(layer_idx);
         auto n_cols = dim.first;
         auto n_rows = dim.second;
 
-        std::vector<double> clean_mask(poly_dim, 0);
+        std::vector<double> clean_mask(vec_size, 0);
         for(int_type i = 0; i < n_cols; i++) {
             clean_mask[i * m_batch_size] = 1;
         }
 
-        auto mask = m_cc->MakeCKKSPackedPlaintext(clean_mask);
+        auto mask = m_cc->MakeCKKSPackedPlaintext(clean_mask,1,0,nullptr,vec_size);
         vector = m_cc->EvalMult(vector, mask);
 
         // repeat the vector now
-        auto fixed_shift = 1;
+        int32_t fixed_shift = 1;
 
         assert(n_rows < m_batch_size);
         while (fixed_shift < n_rows) {
@@ -717,11 +728,11 @@ namespace ckks_nn {
             auto vector_rot = m_cc->EvalRotate(vector, -fixed_shift);
             m_cc->EvalAddInPlace(vector, vector_rot);
 
-            fixed_shift <<= 1;
+            fixed_shift *= 2;
         }
 
         // vector is now repeated *at least* n_rows times
-        std::vector<double> matrix_vec(poly_dim, 0);
+        std::vector<double> matrix_vec(vec_size, 0);
 
         for(int_type row_i = 0; row_i < n_rows; row_i++) {
             for(int_type col_i = 0; col_i < n_cols; col_i++) {
@@ -729,23 +740,23 @@ namespace ckks_nn {
             }
         }
 
-        auto matrix_vec_ptx = m_cc->MakeCKKSPackedPlaintext(matrix_vec);
+        auto matrix_vec_ptx = m_cc->MakeCKKSPackedPlaintext(matrix_vec,1,0,nullptr,vec_size);
         auto prod_unreduced = m_cc->EvalMult(vector, matrix_vec_ptx);
 
         // next we need to reduce it block_wise
-        auto next_pow2 = 1;
+        int32_t next_pow2 = 1;
         while (next_pow2 < n_cols) {
             next_pow2 *= 2;
         }
 
-        auto reduction_shift = next_pow2 * m_batch_size / 2;
+        int32_t reduction_shift = next_pow2 * int32_t(m_batch_size) / 2;
         while (reduction_shift >= m_batch_size) {
 
             rotations_performed.insert(reduction_shift);
             auto vector_red_rot = m_cc->EvalRotate(prod_unreduced, reduction_shift);
             m_cc->EvalAddInPlace(prod_unreduced, vector_red_rot);
 
-            reduction_shift >>= 1;
+            reduction_shift /= 2;
         }
 
         return prod_unreduced;
@@ -755,9 +766,9 @@ namespace ckks_nn {
     CKKSCiphertext NeuralNetEvaluator::EvalLayerOneShot(const ckks_nn::NeuralNet &nn, ckks_nn::int_type layer_idx,
                                                         ckks_nn::CKKSCiphertext &vector, bool transposed) {
 
-        auto poly_dim = m_cc->GetRingDimension() / 2;
+        auto vec_size = vector->GetSlots();;
         auto bias = nn.get_bias_vector(layer_idx);
-        std::vector<double> bias_large_vec(poly_dim, 0);
+        std::vector<double> bias_large_vec(vec_size, 0);
 
         CKKSCiphertext mv_res;
 
@@ -789,12 +800,14 @@ namespace ckks_nn {
 
         for(int_type i=1; i < nn.get_n_layers(); i++) {
 
+            std::cerr << "Layer : " << i << std::endl;
+
             /*
             if (layer_i_out->GetLevel() + 8 > 26) {
                 LOG_CT_LEVEL("After activation function", layer_i_out)
                 layer_i_out = m_cc->EvalBootstrap(layer_i_out);
                 LOG_CT_LEVEL("After bootstrap", layer_i_out)
-            } */
+            }*/
 
             layer_i_out = EvalLayerOneShot(nn, i, layer_i_out, (i % 2) == 1);
 

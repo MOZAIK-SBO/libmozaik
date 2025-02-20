@@ -27,6 +27,8 @@ include_directories( ${OpenFHE_INCLUDE}/pke )
 include_directories( ${OpenFHE_INCLUDE}/binfhe )
 ### add directories for other OpenFHE modules as needed for your project
 
+
+
 link_directories( ${OpenFHE_LIBDIR} )
 link_directories( ${OPENMP_LIBRARIES} )
 
@@ -68,7 +70,7 @@ add_executable(client_keygen src/setup_client.cpp
         lib/include/neural_net_evaluator.h
         lib/include/typedefs.h
         lib/src/neural_net_evaluator.cpp
-        )
+)
 target_include_directories(client_keygen PUBLIC lib/include)
 target_include_directories(client_keygen PUBLIC assets/dependencies/nlohmann-json)
 
@@ -82,3 +84,22 @@ add_executable(iot_protect src/iot_protect.cpp lib/src/neural_net_io.cpp
 target_include_directories(iot_protect PUBLIC lib/include)
 target_include_directories(iot_protect PUBLIC assets/dependencies/nlohmann-json)
 add_executable(test_deser src/test_deserial.cpp)
+
+add_executable(split_ct src/ciphertext_split.cpp lib/src/neural_net_io.cpp
+        lib/include/neural_net.h
+        lib/src/neural_net_func.cpp
+        lib/include/neural_net_evaluator.h
+        lib/include/typedefs.h
+        lib/src/neural_net_evaluator.cpp)
+target_include_directories(split_ct PUBLIC lib/include)
+target_include_directories(split_ct PUBLIC assets/dependencies/nlohmann-json)
+
+add_executable(combine_ct src/ciphertext_combine.cpp lib/src/neural_net_io.cpp
+        lib/include/neural_net.h
+        lib/src/neural_net_func.cpp
+        lib/include/neural_net_evaluator.h
+        lib/include/typedefs.h
+        lib/src/neural_net_evaluator.cpp
+)
+target_include_directories(combine_ct PUBLIC lib/include)
+target_include_directories(combine_ct PUBLIC assets/dependencies/nlohmann-json)

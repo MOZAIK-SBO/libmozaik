@@ -205,10 +205,12 @@ void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string
 
         assert(specific_results.size() == expected_results.size());
 
+        int correct = 0;
         for(int j = 0; j < specific_results.size(); j++) {
 
             auto& target = expected_results.at(j);
             auto& got = specific_results.at(j);
+
 
             auto L2 = relative_error(target, got, 2);
             auto L1 = relative_error(target, got, 1);
@@ -225,6 +227,8 @@ void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string
             int enc_label = std::distance(got.begin(), std::max_element(got.begin(), got.end()));
             auto true_label = expected_classes.at(j);
 
+            correct += clear_label == enc_label ? 1 : 0;
+
             clear_labels.push_back(clear_label);
             enc_labels.push_back(enc_label);
             true_labels.push_back(true_label);
@@ -238,6 +242,8 @@ void gather_statistics(NeuralNetEvaluator& evaluator, NeuralNet& nn, std::string
             L0_err_soft.push_back(L0);
 
         }
+
+        std::cerr << "Got " << correct << " / " << specific_results.size() << std::endl;
 
     }
 
@@ -269,7 +275,7 @@ void main_oneshot() {
     auto input = std::ifstream(datapath + "/mitbih_test.csv");
     auto data = readCSV(input);
 
-    auto n_slots = evaluator.m_cc->GetRingDimension() / 2;
+    auto n_slots = cc->GetRingDimension() / 2;// 256 * 64;
     std::vector<double> packed_vector(n_slots, 0);
 
     std::random_device rd; // obtain a random number from hardware
@@ -280,7 +286,7 @@ void main_oneshot() {
 
     std::vector<double> vec(n_slots, 0);
     std::copy(sample.second.begin(), sample.second.end(), vec.begin());
-    auto pt = evaluator.m_cc->MakeCKKSPackedPlaintext(vec);
+    auto pt = evaluator.m_cc->MakeCKKSPackedPlaintext(vec, 1, 0, nullptr, n_slots);
     auto ct = evaluator.m_cc->Encrypt(keys.publicKey, pt);
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -288,13 +294,14 @@ void main_oneshot() {
     auto stop = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
 
+    std::cerr << elapsed << std::endl;
+
+
     Plaintext res_plain;
     evaluator.m_cc->Decrypt(evaluator.m_key.secretKey, res, &res_plain);
     res_plain->SetLength(5);
 
     std::cerr << res_plain << std::endl;
-    std::cerr << elapsed << std::endl;
-
 }
 
 void single_main() {
@@ -343,9 +350,9 @@ void single_main() {
 
 int main() {
 
-    main_oneshot();
+    //main_oneshot();
 
-    /*
+
     NeuralNet test;
 
     NeuralNetEvaluator evaluator;
@@ -355,5 +362,5 @@ int main() {
     std::string datapath = "/home/leonard/PhD/libmozaik/fhe/assets/nn_data";
 
     gather_statistics(evaluator, test, datapath);
-    */
+
 }
