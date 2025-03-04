@@ -19,8 +19,8 @@ using namespace ckks_nn;
 
 int main(int argc, char* argv[]) {
 
-    if (argc < 3) {
-        std::cerr << "Usage: ./main_server [FHE_KEY_DIR || CRYPTO_CONFIG_PATH ] [CIPHERTEXT_FILE] [RESULT_FILE]" << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: ./main_server [FHE_KEY_DIR || CRYPTO_CONFIG_PATH ] [BATCH_SIZE] [CIPHERTEXT_FILE] [RESULT_FILE]" << std::endl;
         std::cerr << "If [RESULT_FILE] is not specified, we set [RESULT_FILE] = [CIPHERTEXT_FILE].out" << std::endl;
         std::cerr << "Example: ./main_server assets/configs/default ct1 ct1_result" << std::endl;
         std::exit(0);
@@ -48,11 +48,12 @@ int main(int argc, char* argv[]) {
         config_file = "crypto_config.json";
     }
 
-    std::string ct_file = std::string(argv[2]);
+    std::string ct_file = std::string(argv[3]);
     std::string out_file;
+    bool big_batch = std::stoi(argv[2]) > 4;
 
-    if (argc >= 4) {
-        out_file = argv[3];
+    if (argc >= 5) {
+        out_file = argv[4];
     } else {
         out_file = ct_file + ".out";
     }
@@ -61,10 +62,16 @@ int main(int argc, char* argv[]) {
     auto nn = NeuralNetEvaluator::build_nn_from_crypto_config(config_dir, config_file);
     // Load ciphertexts
     // Evaluate
-    auto nn_evaluator = NeuralNetEvaluator(config_dir);
+    auto nn_evaluator = NeuralNetEvaluator(config_dir, "crypto_config.json", big_batch);
     auto ciphertext = NeuralNetEvaluator::load_ciphertext_from_file(ct_file);
 
-    auto result = nn_evaluator.eval_network(nn, ciphertext);
-    // Write result
-    NeuralNetEvaluator::write_results(result, out_file);
+    if (not big_batch) {
+        auto result = nn_evaluator.EvalNetworkOneShot(nn, ciphertext);
+        // Write result
+        NeuralNetEvaluator::write_results(result, out_file);
+    } else {
+        auto result = nn_evaluator.eval_network(nn, ciphertext);
+        // Write result
+        NeuralNetEvaluator::write_results(result, out_file);
+    }
 }

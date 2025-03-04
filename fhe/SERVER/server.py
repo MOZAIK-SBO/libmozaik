@@ -103,6 +103,7 @@ class FHEServer:
         if not isinstance(ct_data, list):
             ct_data = [ct_data]
 
+        # TODO: Fixme
         for (i, datum_index), ct_datum in zip(data_index_to_request, ct_data):
             ct_path = self.data_worker.put_ct_into_dir(user_id,str(datum_index),ct_datum)
             ct_paths.append((i, ct_path))
@@ -114,7 +115,6 @@ class FHEServer:
             if analysis_type == "Heartbeat-Demo-1":
                 inference_binary_path = self.data_worker.bin / "fhe_server"
                 res = subprocess.call([str(inference_binary_path.absolute()), config_path, ct_path])
-
 
                 # res = subprocess.check_output(["/usr/bin/touch", ct_path + ".out"])
                 if self.data_worker.output_encoding == "JSON":

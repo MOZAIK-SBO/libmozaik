@@ -55,9 +55,9 @@ class TestFHEServer(unittest.TestCase):
 
         with self.server.flask_server.test_client() as client:
             data = {
-                'analysis_id': '123',
-                'user_id': '456',
-                'data_index': [1],
+                'analysis_id': [['123']],
+                'user_id': [['456']],
+                'data_index': [[1]],
                 'analysis_type': 'Heartbeat-Demo-1'
             }
             response = client.post('/analyse/', json=data)

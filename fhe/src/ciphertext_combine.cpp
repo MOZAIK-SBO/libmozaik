@@ -43,20 +43,22 @@ int main(int argc, char** argv) {
 
     auto stride = ct_count <= 4 ? 256 * 64 : 256;
 
-    for (int32_t i = 0; i < ct_count; i++) {
+    for (int32_t i = 1; i < ct_count; i++) {
         std::string ct_i_name = std::string(argv[i + 3]);
         auto base_ct = ckks_nn::NeuralNetEvaluator::load_ciphertext_from_file(ct_i_name);;
         uint32_t base_i = i;
         uint32_t current_shift = 0;
+        unsigned acc_offset = 0;
         while (base_i != 0) {
             auto bit = base_i & 1;
             if (bit) {
                 base_ct = context->EvalRotate(base_ct, stride * int32_t(bit << current_shift));
+                acc_offset += (bit << current_shift);
             }
             base_i >>= 1;
             current_shift++;
         }
-
+        std::cerr << acc_offset;
         context->EvalAddInPlace(ct_acc, base_ct);
     }
 

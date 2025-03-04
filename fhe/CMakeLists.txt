@@ -27,13 +27,11 @@ include_directories( ${OpenFHE_INCLUDE}/pke )
 include_directories( ${OpenFHE_INCLUDE}/binfhe )
 ### add directories for other OpenFHE modules as needed for your project
 
-
-
 link_directories( ${OpenFHE_LIBDIR} )
-link_directories( ${OPENMP_LIBRARIES} )
+link_directories( ${OPENMP_INCLUDES} )
 
 message(STATUS "${OpenFHE_EXE_LINKER_FLAGS}")
-set( CMAKE_EXE_LINKER_FLAGS "-static")
+#set( CMAKE_EXE_LINKER_FLAGS "-static")
 #link_libraries( ${OpenFHE_STATIC_LIBRARIES} )
 link_libraries(OPENFHEcore_static OPENFHEpke_static OPENFHEbinfhe_static)
 
@@ -50,6 +48,7 @@ add_executable(fhe src/main.cpp
 
 target_include_directories(fhe PUBLIC lib/include)
 target_include_directories(fhe PUBLIC assets/dependencies/nlohmann-json)
+target_link_libraries(fhe PUBLIC libomp.so)
 
 # Executable that runs network from stored key material and ciphertexts
 add_executable(fhe_server src/run_network_server.cpp
@@ -83,6 +82,7 @@ add_executable(iot_protect src/iot_protect.cpp lib/src/neural_net_io.cpp
         lib/src/neural_net_evaluator.cpp)
 target_include_directories(iot_protect PUBLIC lib/include)
 target_include_directories(iot_protect PUBLIC assets/dependencies/nlohmann-json)
+
 add_executable(test_deser src/test_deserial.cpp)
 
 add_executable(split_ct src/ciphertext_split.cpp lib/src/neural_net_io.cpp

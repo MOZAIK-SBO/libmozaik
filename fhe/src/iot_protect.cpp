@@ -14,15 +14,13 @@
 #include "cryptocontext-ser.h"
 #include "key/key-ser.h"
 #include "scheme/ckksrns/ckksrns-ser.h"
+#include "metadata-ser.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
-using namespace lbcrypto;
 using namespace ckks_nn;
 
 
-
-const auto ser_type = SerType::JSON;
 
 // We assume data file are stored with 1 value per line, delimited by \n not \r\n
 std::vector<double> read_data(fs::path& data_path, unsigned int length) {
@@ -40,6 +38,8 @@ std::vector<double> read_data(fs::path& data_path, unsigned int length) {
 }
 
 int main(int argc, char* argv[]) {
+    const auto ser_type = SerType::BINARY;
+
     if (argc < 4) {
         std::cerr << "Usage: ./iot_protect [PUBLIC_KEY] [DATA_FILE] [OUTPUT_FILE]" << std::endl;
         std::exit(0);

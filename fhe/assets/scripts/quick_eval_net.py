@@ -23,7 +23,9 @@ def eval_net(v_in, prefix="./"):
         inter = weights[i] @ inter
         inter += biases[i]
 
-        inter[inter < 0] = 0
+        # inter[inter < 0] = 0
+        inter = in
+
         print("Layer out", inter)
 
     inter = weights[-1] @ inter + biases[-1]

@@ -95,8 +95,8 @@ class MozaikObelisk:
 
         # Prepare the request body
         request_body = {
-            "user_id": user_id,
-            "data_index": data_index
+            "user_id": [[user_id]],
+            "data_index": [data_index]
         }
 
         # Make the POST request to the endpoint
@@ -194,9 +194,10 @@ class MozaikObelisk:
         url = f'{self.base_url}{endpoint}'
 
         # Define the payload (data to be sent in the POST request)
+        # should be lists ?
         payload = {
-            'user_id': user_id,
-            'result': result,
+            'user_id': [[user_id]],
+            'result': [[result]],
         }
 
         try:
@@ -230,8 +231,8 @@ class MozaikObelisk:
 
         # Define the payload (data to be sent in the POST request)
         payload = {
-            'user_id': user_id,
-            'result': result,
+            'user_id': [[user_id]],
+            'result': [[result]],
         }
 
         payload_dumped = json.dumps(payload).encode("utf-8")

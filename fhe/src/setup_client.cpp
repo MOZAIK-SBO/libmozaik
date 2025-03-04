@@ -8,7 +8,7 @@
 
 #include "json.hpp"
 #include "openfhe.h"
-
+// header files needed for serialization
 #include "ciphertext-ser.h"
 #include "cryptocontext-ser.h"
 #include "key/key-ser.h"
@@ -18,7 +18,6 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
-using namespace lbcrypto;
 using namespace ckks_nn;
 
 void generate_parameter_set_4(fs::path& key_dir, fs::path& nn_config) {
@@ -49,7 +48,7 @@ void generate_parameter_set_4(fs::path& key_dir, fs::path& nn_config) {
     cc_params.SetScalingTechnique(FLEXIBLEAUTO);
     cc_params.SetFirstModSize(firstMod);
 
-    auto new_depth = 32;
+    auto new_depth = 15;
     cc_params.SetMultiplicativeDepth(new_depth);
 
     auto cc = GenCryptoContext(cc_params);

@@ -258,9 +258,9 @@ namespace ckks_nn {
 
         switch (activation) {
             case NeuralNet::Activation::RELU: {
-
-                auto func = [](double x) -> double { return x > 0 ? x : 0;};
-                return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 5);
+                //auto func = [](double x) -> double { return x > 0 ? x : 0;};
+                //return m_cc->EvalChebyshevFunction(func, vector, lb, ub, 5);
+                return m_cc->EvalSquare(vector);
             }
             case NeuralNet::Activation::SOFTMAX_LINEAR: {
 
@@ -360,11 +360,13 @@ namespace ckks_nn {
 
         auto M = m_cc->GetCyclotomicOrder();
         auto vector_periodic_digits = m_cc->EvalFastRotationPrecompute(vector_periodic);
-        
-        for(int_type vec_idx = 1; vec_idx < matrix_vectors.size(); vec_idx++) {
-            rotations_performed.insert(vec_idx);
+        auto vec_count = matrix_vectors.size();
+
+        for(int_type vec_idx = 1; vec_idx < vec_count; vec_idx++) {
+            //rotations_performed.insert(vec_idx);
             auto rotated_vector = m_cc->EvalFastRotation(vector_periodic, vec_idx, M, vector_periodic_digits);
             auto prod = m_cc->EvalMult(rotated_vector, matrix_vectors.at(vec_idx));
+
             m_cc->EvalAddInPlace(accumulator, prod);
         }
 
@@ -575,7 +577,7 @@ namespace ckks_nn {
             std::exit(1);
         }
 
-        m_batch_size = m_cc->GetRingDimension() / 2;
+        m_batch_size = 256;
 
         std::string auto_path = config[AUTO_STRING];
         std::ifstream auto_key_istream(auto_path, std::ios::in | std::ios::binary);
@@ -596,10 +598,11 @@ namespace ckks_nn {
             std::exit(1);
         }
 
+        /*
         if (!sum_key_istream.is_open()) {
             std::cerr << "Cannot read serialization from " << sum_path << std::endl;
             std::exit(1);
-        }
+        }*/
 
         if (run_boot_setup) {
             m_cc->EvalBootstrapSetup({4,4});
@@ -607,7 +610,7 @@ namespace ckks_nn {
 
         std::cout << m_cc->DeserializeEvalAutomorphismKey(auto_key_istream, ser_type) << std::endl;
         std::cout << m_cc->DeserializeEvalMultKey(mult_key_istream, ser_type) << std::endl;
-        std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
+        //std::cout << m_cc->DeserializeEvalSumKey(sum_key_istream, ser_type) << std::endl;
     }
 
     CKKSCiphertext NeuralNetEvaluator::load_ciphertext_from_file(const std::string &ct_path) {
@@ -812,11 +815,6 @@ namespace ckks_nn {
             layer_i_out = EvalLayerOneShot(nn, i, layer_i_out, (i % 2) == 1);
 
         }
-
-        for(auto& rot : rotations_performed) {
-            std::cerr << rot << ", ";
-        }
-        std::cerr << std::endl;
 
         rotations_performed.clear();
 

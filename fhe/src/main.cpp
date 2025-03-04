@@ -267,7 +267,7 @@ void main_oneshot() {
 
     NeuralNet test;
 
-    NeuralNetEvaluator evaluator;
+    NeuralNetEvaluator evaluator(true);
     auto cc = evaluator.m_cc;
     auto keys = evaluator.m_key;
 
@@ -296,7 +296,6 @@ void main_oneshot() {
 
     std::cerr << elapsed << std::endl;
 
-
     Plaintext res_plain;
     evaluator.m_cc->Decrypt(evaluator.m_key.secretKey, res, &res_plain);
     res_plain->SetLength(5);
@@ -307,7 +306,7 @@ void main_oneshot() {
 void single_main() {
     NeuralNet test;
 
-    NeuralNetEvaluator evaluator;
+    NeuralNetEvaluator evaluator(false);
     auto cc = evaluator.m_cc;
     auto keys = evaluator.m_key;
 
@@ -323,11 +322,8 @@ void single_main() {
     pt->SetLength(evaluator.m_batch_size);
 
     auto ct = cc->Encrypt(keys.publicKey, pt);
-
     auto start = std::chrono::high_resolution_clock::now();
-
     auto res = evaluator.eval_network(test, ct);
-
     auto stop = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
 
@@ -350,9 +346,9 @@ void single_main() {
 
 int main() {
 
-    //main_oneshot();
+    main_oneshot();
 
-
+    /*
     NeuralNet test;
 
     NeuralNetEvaluator evaluator;
@@ -362,5 +358,5 @@ int main() {
     std::string datapath = "/home/leonard/PhD/libmozaik/fhe/assets/nn_data";
 
     gather_statistics(evaluator, test, datapath);
-
+    */
 }
