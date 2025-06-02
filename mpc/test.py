@@ -23,7 +23,6 @@ from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
 
 from key_share import MpcPartyKeys, decrypt_key_share, decrypt_key_share_for_streaming, prepare_params_for_dist_enc
 from rep3aes import Rep3AesConfig, dist_enc, dist_dec
@@ -637,17 +636,6 @@ class IntegrationTest(unittest.TestCase):
         # close and quit selenium
         cls.firefox_driver.quit()
 
-    def wait_for_results_api(self, timeout=10):
-        js_ready = """
-        return !!(window.integration &&
-                    window.integration.results &&
-                    window.integration.results.createAnalysisRequestDataForStreaming);
-        """
-        WebDriverWait(self.firefox_driver, timeout).until(
-            lambda d: d.execute_script(js_ready),
-            message="window.integration.results API did not load in time",
-        )
-
     def test_trivial(self):
         """
         Checks whether the webdriver works and can load the glue html file
@@ -894,8 +882,6 @@ class IntegrationTest(unittest.TestCase):
         abs_path = root_file.absolute()
         self.firefox_driver.get("file://" + str(abs_path))
 
-        self.wait_for_results_api()
-
         try:
             self.firefox_driver.execute_script(script)
         except Exception as e:
@@ -952,8 +938,6 @@ class IntegrationTest(unittest.TestCase):
 
         abs_path = root_file.absolute()
         self.firefox_driver.get("file://" + str(abs_path))
-
-        self.wait_for_results_api()
 
         try:
             self.firefox_driver.execute_script(script)
@@ -1026,8 +1010,6 @@ class IntegrationTest(unittest.TestCase):
 
         abs_path = root_file.absolute()
         self.firefox_driver.get("file://" + str(abs_path))
-
-        self.wait_for_results_api()
 
         try:
             self.firefox_driver.execute_script(script)

@@ -46,7 +46,7 @@ jobs:
           CXX = g++
           MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE
         EOF
-        make Fake-Offline.x malicious-rep-ring-party.x
+        make -j4 Fake-Offline.x malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
         ./compile.py -R64 heartbeat_inference_demo_batched_4
         Scripts/setup-ssl.sh 3
