@@ -19,8 +19,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install firefox
-      run: sudo apt install -y firefox
+    - name: Install Firefox + Geckodriver (deb, no snap)
+      run: |
+        sudo add-apt-repository -y ppa:mozillateam/ppa
+        sudo apt-get update
+        sudo apt-get install -y firefox-esr firefox-esr-geckodriver
+        firefox --version      # sanity check
+        geckodriver --version
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
@@ -31,10 +36,16 @@ jobs:
         pip install flake8
         pip install -r mpc/requirements.txt
     - name: Build MP-SPDZ
+      env:
+        CXX: g++          # force GNU C++ instead of Clang
+        CC: gcc
       run: |
         cd mpc/MP-SPDZ
         sudo apt-get install automake build-essential clang cmake git libboost-dev libboost-thread-dev libboost-filesystem-dev libboost-iostreams-dev libgmp-dev libntl-dev libsodium-dev libssl-dev libtool python3
-        echo 'MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE' > CONFIG.mine
+        cat > CONFIG.mine <<'EOF'
+          CXX = g++
+          MY_CFLAGS += -I./local/include -DOUR_TRUNC -DBATCH_VFY -DINSECURE
+        EOF
         make Fake-Offline.x malicious-rep-ring-party.x
         ./compile.py -R64 heartbeat_inference_demo
         ./compile.py -R64 heartbeat_inference_demo_batched_4
